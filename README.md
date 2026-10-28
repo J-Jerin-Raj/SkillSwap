@@ -1,33 +1,35 @@
-# 🔄 SkillSwap — Peer-to-Peer Skill Matching & Communication Platform
+# SkillSwap - Peer-to-Peer Skill Matching & Communication Platform
 
 > **OOP Micro-Project (Semester 3 Java)**  
 > A distributed, client-server desktop application designed for collaborative peer learning. Users register skills they can teach and topics they want to learn; a matchmaking engine pairs complementary users and allows them to exchange messages and collaborate.
 
 ---
 
-## 📌 Table of Contents
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [System Architecture](#-system-architecture)
-- [Object-Oriented Programming (OOP) Concepts](#-object-oriented-programming-oop-concepts)
-- [Project Structure](#-project-structure)
-- [Prerequisites](#-prerequisites)
-- [How to Run](#-how-to-run)
+## Table of Contents
+- [Overview](#overview)
+- [Course Outcomes (CO) Mapping](#course-outcomes-co-mapping)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Object-Oriented Programming (OOP) Concepts](#object-oriented-programming-oop-concepts)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [How to Run](#how-to-run)
   - [Option A: Running on a Single Laptop (Localhost)](#option-a-running-on-a-single-laptop-localhost)
   - [Option B: Running Across Two Laptops (LAN / Wi-Fi)](#option-b-running-across-two-laptops-lan--wi-fi)
   - [Optional: MySQL Database Setup](#optional-mysql-database-setup)
-- [Step-by-Step Usage & Demo Scenario](#-step-by-step-usage--demo-scenario)
-- [Communication Protocol](#-communication-protocol)
-- [Future Enhancements](#-future-enhancements)
+- [Step-by-Step Usage & Demo Scenario](#step-by-step-usage--demo-scenario)
+- [Communication Protocol](#communication-protocol)
+- [Future Enhancements](#future-enhancements)
 
 ---
 
-## 📖 Overview
+## Overview
 
 In academic and developer communities, students frequently want to learn new tools or concepts (e.g., Godot, Flutter, Data Structures, Graphic Design) while possessing proficiencies in other subjects (e.g., Unity, Java, Web Development). 
 
 **SkillSwap** bridges this gap:
 1. Each user submits their profile specifying:
+   - **Credentials:** Username and Password authentication.
    - **Offered Skills:** Subjects/tools they are confident teaching.
    - **Wanted Skills / Interests:** Subjects/tools they want to learn.
 2. The server-side matching engine analyzes interest intersections across the user base.
@@ -35,82 +37,104 @@ In academic and developer communities, students frequently want to learn new too
 
 ---
 
-## ✨ Key Features
+## Course Outcomes (CO) Mapping
 
-- **🎨 Modern Slate Dark UI**: Sleek, contemporary desktop interface with rounded cards, avatar initials, colorful skill badges, and real-time interactive input chips.
-- **🔐 Startup Authentication Flow**: Dedicated Sign In and Sign Up screens on client launch; seamlessly registers multiple skills and learning interests with live tag previews.
-- **🎯 Multi-Skill Affinity Scoring**: Calculates comprehensive compatibility percentages (0-100%) incorporating reciprocal trades, mentor matches, learner demand, and shared study interests.
-- **🔍 360° Discovery Feed**: Visual cards displaying exactly what peers can teach you, what you teach them, and shared learning goals.
-- **👥 Community Directory**: Inspect all registered users and their learning goals across the network.
-- **💬 Direct In-App Messaging**: Real-time communication and inbox management between peers to plan study sessions and exchange notes.
-- **🌐 Cross-Device Networking**: Socket-based client-server design allows execution across multiple laptops connected to the same Wi-Fi or mobile hotspot (Port 5050).
-- **💾 Hybrid Persistence (Zero-Config or MySQL)**: Runs completely in-memory with zero setup required, with automatic fallback and optional persistent storage using MySQL through JDBC.
+This project incorporates all five Course Outcomes (CO1 to CO5) defined in the curriculum:
+
+| Course Outcome | Description | Implementation in SkillSwap |
+| :--- | :--- | :--- |
+| **CO1** | **Structural Elements & Basic Constructs** | Enhanced switch expressions (`MatchResult.getCompatibilityLabel()`), control flow statements, for-each looping over skill collections, string normalization, and array splitting. |
+| **CO2** | **OOP Principles & Hierarchy** | Abstract class (`AbstractAccount`), interfaces (`Authenticatable`, `Matchable`), inheritance (`User extends AbstractAccount implements Matchable`), encapsulation (`private final` fields, defensive copying with `Collections.unmodifiableSet()`), and static/final keywords. |
+| **CO3** | **Robust Solutions & Concurrency** | User-defined exceptions (`AuthenticationException`, `InvalidProfileException`), multithreaded socket server (`ExecutorService`), thread synchronization (`synchronized` methods in `Database`), and 1-second background auto inbox poller (`javax.swing.Timer`). |
+| **CO4** | **Collections, Generics & File I/O** | Java Collections Framework (`List`, `Set`, `Map`, `Queue`), generic class with type parameters (`ServiceResult<T>`), stream and lambda operations for skill filtering, and file I/O operations (`exportChatLogToFile()` using `BufferedWriter`). |
+| **CO5** | **Networking, GUI & JDBC** | Multi-client TCP socket programming (`ServerSocket`, `Socket`), Swing GUI design (`JFrame`, `JTabbedPane`, `CardLayout`, `BorderLayout`, `BoxLayout`, `GridBagLayout`), event handling (`ActionListener`, `DocumentListener`), and JDBC database connectivity (`Database.java`). |
 
 ---
 
-## 🏗 System Architecture
+## Key Features
+
+- **Modern Slate Dark UI**: Clean, contemporary desktop interface with rounded cards, avatar initials, colorful skill badges, and real-time interactive input chips (no emojis).
+- **Startup Authentication Flow**: Dedicated Sign In and Sign Up views on client launch; requires username and password validation.
+- **Multi-Skill Affinity Scoring**: Calculates comprehensive compatibility percentages (0-100%) incorporating reciprocal trades, mentor matches, learner demand, and shared study interests.
+- **Auto-Checking Live Inbox**: Checks for new messages automatically every 1 second in the background without freezing the GUI.
+- **Direct Messaging Integration**: Clicking "Message User" on any peer card directly switches to the chat module and focuses the input field.
+- **Mirrored Profile Editor**: Allows users to update password, contact info, offered skills, and wanted interests with permanent greyed-out username.
+- **File Export**: One-click export of chat history to a local text file.
+- **Cross-Device Networking**: Socket-based client-server design allows execution across multiple laptops connected to the same Wi-Fi or mobile hotspot (Port 5050).
+- **Hybrid Persistence (Zero-Config or MySQL)**: Runs completely in-memory with zero setup required, with automatic fallback and optional persistent storage using MySQL through JDBC.
+
+---
+
+## System Architecture
 
 The application adopts a 3-tier modular architecture:
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   Presentation Tier                    │
-│      SkillSwapClient (Java Swing GUI Application)       │
-└───────────────────────────▲────────────────────────────┘
-                            │ Raw TCP Sockets (Port 5050)
-┌───────────────────────────▼────────────────────────────┐
-│                    Application Tier                    │
-│    SkillSwapServer (Multithreaded Executor Pool)       │
-│                           │                            │
-│           ┌───────────────┴───────────────┐            │
-│           ▼                               ▼            │
-│      MatchEngine                    Data Router        │
-│  (Reciprocal Matching,            (Direct Inboxes,     │
-│   Affinity Scoring)                Message Queues)     │
-└───────────────────────────▲────────────────────────────┘
-                            │
-┌───────────────────────────▼────────────────────────────┐
-│                       Data Tier                        │
-│   In-Memory Collections  ◄───Fallback───►  MySQL (JDBC)│
-│ (ConcurrentHashMap & Sets)                (users table)│
-└────────────────────────────────────────────────────────┘
++--------------------------------------------------------+
+|                   Presentation Tier                    |
+|      SkillSwapClient (Java Swing GUI Application)       |
++---------------------------+----------------------------+
+                            | Raw TCP Sockets (Port 5050)
++---------------------------v----------------------------+
+|                    Application Tier                    |
+|    SkillSwapServer (Multithreaded Executor Pool)       |
+|                           |                            |
+|           +---------------+---------------+            |
+|           v                               v            |
+|      MatchEngine                    Data Router        |
+|  (Reciprocal Matching,            (Direct Inboxes,     |
+|   Affinity Scoring)                Message Queues)     |
++---------------------------+----------------------------+
+                            |
++---------------------------v----------------------------+
+|                       Data Tier                        |
+|   In-Memory Collections  <---Fallback--->  MySQL (JDBC)|
+| (ConcurrentHashMap & Sets)                (users table)|
++--------------------------------------------------------+
 ```
 
 ---
 
-## 🧩 Object-Oriented Programming (OOP) Concepts
+## Object-Oriented Programming (OOP) Concepts
 
 This micro-project leverages core Java OOP and design principles:
 
 1. **Encapsulation**:
-   - `User`: Private attributes (`name`, `contact`, `offered`, `wanted`) accessed via read-only getters.
+   - `User`: Private attributes accessed via read-only getters.
    - Collections are guarded against outside mutation using `Collections.unmodifiableSet()`.
-2. **Separation of Concerns & Modularity**:
-   - Clear decoupling into distinct responsibilities: GUI (`SkillSwapClient`), network protocol handling (`SkillSwapServer`), business & matching algorithms (`MatchEngine`), data model (`User`, `MatchResult`), and database bridge (`Database`).
-3. **Abstraction & Interfaces**:
-   - Extensive usage of Java Collections Framework interfaces (`Map`, `Set`, `List`) hiding underlying data structures (`ConcurrentHashMap`, `LinkedHashSet`, `CopyOnWriteArrayList`).
-4. **Polymorphism & Natural Ordering**:
+2. **Inheritance & Abstraction**:
+   - `AbstractAccount` serves as the base class for accounts, implementing `Authenticatable`.
+   - `User` extends `AbstractAccount` and implements `Matchable`.
+3. **Polymorphism & Natural Ordering**:
    - `MatchResult` implements `Comparable<MatchResult>`, overriding `compareTo()` to automatically order candidates by descending match affinity score.
+4. **Exception Handling**:
+   - Custom exceptions `AuthenticationException` and `InvalidProfileException` ensure strict validation.
 5. **Concurrency & Thread Safety**:
    - Multi-client handling using `ExecutorService` thread pool.
-   - Concurrent collections (`ConcurrentHashMap`, `CopyOnWriteArrayList`) prevent race conditions during simultaneous user registrations and message exchanges.
+   - Concurrent collections (`ConcurrentHashMap`, `CopyOnWriteArrayList`, `ConcurrentLinkedQueue`) prevent race conditions during simultaneous user registrations and message exchanges.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 | File | Description |
 | :--- | :--- |
-| [`User.java`](User.java) | Domain model encapsulating user identity, contact details, offered skills, and learning interests. |
-| [`MatchResult.java`](MatchResult.java) | Result transfer object encapsulating peer match details, skill overlaps, and affinity score; implements `Comparable`. |
-| [`MatchEngine.java`](MatchEngine.java) | Core matching algorithms (reciprocal 2-way matching, demand discovery) and in-memory message routing. |
-| [`SkillSwapServer.java`](SkillSwapServer.java) | Multithreaded TCP socket server listening on port 5050; detects host IPs and handles client requests. |
-| [`SkillSwapClient.java`](SkillSwapClient.java) | Swing-based graphical user interface for profile registration, matchmaking queries, directory viewing, and direct messaging. |
-| [`Database.java`](Database.java) | JDBC persistence layer connecting to MySQL, with graceful fallback to in-memory mode if MySQL is not available. |
+| `AbstractAccount.java` | [CO2] Base abstract class encapsulating user identity, credentials, and contact info. |
+| `Authenticatable.java` | [CO2] Interface defining credential verification contracts. |
+| `Matchable.java` | [CO2] Interface defining skill supply and demand contracts. |
+| `AuthenticationException.java` | [CO3] User-defined exception for invalid login attempts. |
+| `InvalidProfileException.java` | [CO3] User-defined exception for validation errors in profiles. |
+| `ServiceResult.java` | [CO4] Generic response wrapper demonstrating type parameters and static generic methods. |
+| `User.java` | [CO2] Domain model inheriting `AbstractAccount` and implementing `Matchable`. |
+| `MatchResult.java` | [CO1/CO4] Ranked match card with switch-based affinity categorization, implementing `Comparable`. |
+| `MatchEngine.java` | [CO3/CO4] Matching engine calculating affinity scores, managing thread-safe inboxes, and handling authentication. |
+| `SkillSwapServer.java` | [CO3/CO5] Multithreaded TCP socket server listening on port 5050; handles client requests and audit logging. |
+| `SkillSwapClient.java` | [CO4/CO5] Swing-based GUI with authentication, live tag previews, 1-sec auto inbox poller, and file export. |
+| `Database.java` | [CO5] JDBC persistence layer connecting to MySQL with automatic fallback to in-memory mode. |
 
 ---
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 - **Java Development Kit (JDK 11 or higher)**: Make sure `javac` and `java` are available in your path.
   ```bash
@@ -121,7 +145,7 @@ This micro-project leverages core Java OOP and design principles:
 
 ---
 
-## 🚀 How to Run
+## How to Run
 
 ### Step 1: Compile the Project
 
@@ -146,21 +170,21 @@ javac *.java
    ```bash
    java SkillSwapClient
    ```
-   Leave Server IP as `localhost`.
+   Leave Server IP as `localhost`. Click on demo user **Alice** or register a new account.
 
 3. **Start Client 2 (User 2)**:
    In another terminal window:
    ```bash
    java SkillSwapClient
    ```
-   Leave Server IP as `localhost`.
+   Leave Server IP as `localhost`. Click on demo user **Bob** or register a new account.
 
 ---
 
 ### Option B: Running Across Two Laptops (LAN / Wi-Fi)
 
 1. **Network Setup**:
-   Connect both Laptop 1 and Laptop 2 to the same Wi-Fi network (or one can connect to the other's mobile hotspot).
+   Connect both Laptop 1 and Laptop 2 to the same Wi-Fi network (or mobile hotspot).
 
 2. **Laptop 1 (Host / Server)**:
    Start the server:
@@ -201,50 +225,51 @@ If you want user profiles to persist across server restarts:
 
 ---
 
-## 🧪 Step-by-Step Usage & Demo Scenario
+## Step-by-Step Usage & Demo Scenario
 
 ### 1. Register User 1
-- **Name:** Dave
-- **Contact:** `dave@college.edu`
-- **Skills I Can Teach:** `Unity, C#`
-- **Skills I Want To Learn:** `Godot Engine, Python`
-- Click **"Save Profile"**.
+- Switch to **Create Profile (Sign Up)**:
+  - **Name:** Dave
+  - **Password:** `dave123`
+  - **Contact:** `dave@college.edu`
+  - **Skills I Can Teach:** `Unity, C#`
+  - **Skills I Want To Learn:** `Godot Engine, Python`
+- Click **Complete Sign Up & Enter Dashboard**.
 
 ### 2. Register User 2
-- **Name:** Elena
-- **Contact:** `elena@college.edu`
-- **Skills I Can Teach:** `Godot Engine, Blender`
-- **Skills I Want To Learn:** `Unity`
-- Click **"Save Profile"**.
+- On Client 2, switch to **Create Profile (Sign Up)**:
+  - **Name:** Elena
+  - **Password:** `elena123`
+  - **Contact:** `elena@college.edu`
+  - **Skills I Can Teach:** `Godot Engine, Blender`
+  - **Skills I Want To Learn:** `Unity`
+- Click **Complete Sign Up & Enter Dashboard**.
 
 ### 3. Match & Discover
-- On Elena's client, click **"Find Matches"**:
-  - The engine identifies Dave as a **100% Mutual Match**!
-  - Details shown:
-    - What Elena learns from Dave: `Unity`
-    - What Dave learns from Elena: `Godot Engine`
-    - Compatibility score and Dave's contact info.
-- Click **"View All Users & Wanted Skills"** to view what everyone on the network wants to learn.
+- On Elena's client, click **Find Matches**:
+  - The engine identifies Dave as a **Reciprocal Match** with high affinity score.
+  - Elena sees what Dave teaches (`Unity`) and what she teaches Dave (`Godot Engine`).
+- Click **Message Dave**:
+  - The client immediately transitions to the **Direct Messaging & Inbox** tab with Dave prefilled as the recipient.
 
-### 4. Exchange Messages
+### 4. Exchange Messages & Live Auto-Polling
 - On Elena's client:
-  - In **"Send Message To"**, enter: `Dave`
-  - In **"Message"**, enter: `Hi Dave! I saw you want to learn Godot. Let's do a skill swap session!`
-  - Click **"Send Message"**.
+  - Type message: `Hi Dave! Let's swap skills on Unity and Godot.`
+  - Click **Send Message**.
 - On Dave's client:
-  - Click **"Check Inbox"**.
-  - Dave sees the incoming message with timestamp.
+  - Dave's inbox updates automatically within 1 second without clicking anything.
+- Dave clicks **Export Chat Log** to save the conversation to a local file.
 
 ---
 
-## 📡 Communication Protocol
+## Communication Protocol
 
 The server and clients communicate over plain-text line-based TCP socket commands:
 
 | Command | Syntax | Description |
 | :--- | :--- | :--- |
-| `LOGIN` | `LOGIN <name>` | Authenticates user; returns profile details if registered. |
-| `REGISTER` | `REGISTER <name>\|<contact>\|<offered,...>\|<wanted,...>` | Saves/updates a user's profile with multiple skills & interests. |
+| `LOGIN` | `LOGIN <name>\|<password>` | Authenticates user credentials; returns profile details if valid. |
+| `REGISTER` | `REGISTER <name>\|<password>\|<contact>\|<offered,...>\|<wanted,...>` | Saves or updates a user profile with multiple skills & interests. |
 | `MATCH_DATA` | `MATCH_DATA <name>` | Returns structured match cards for GUI rendering with Affinity Scores. |
 | `MATCH` | `MATCH <name>` | Computes complete text report with affinity rankings. |
 | `USERS` | `USERS` | Returns a list of all users and their offered & wanted skills. |
@@ -253,10 +278,9 @@ The server and clients communicate over plain-text line-based TCP socket command
 
 ---
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
-- [ ] Real-time push notifications using persistent client listener threads (replacing pull-based "Check Inbox").
-- [ ] User authentication with secure password hashing.
-- [ ] Skill tags categorization (e.g., Programming, Music, Design, Academics).
-- [ ] Rating and review system for completed skill-swap sessions.
-- [ ] Session scheduling calendar integration.
+- WebSocket push notifications for sub-second latency.
+- SHA-256 password salting and hashing.
+- Skill categories and tags taxonomy.
+- Peer rating and feedback system.

@@ -2,15 +2,14 @@ import java.sql.*;
 import java.util.*;
 
 /**
- * JDBC data tier (MySQL). Requires mysql-connector-j on the classpath.
- * If the DB is not reachable the server still runs in memory only.
- *
- * Setup:  CREATE DATABASE skillswap;
+ * [CO5]: JDBC Data Persistence Tier (MySQL).
+ * Demonstrates Connection management, PreparedStatements, ResultSets,
+ * and graceful fallback to in-memory mode.
  */
 public class Database {
     private static final String URL  = "jdbc:mysql://localhost:3306/skillswap";
     private static final String USER = "root";
-    private static final String PASS = "root";   // change to your password
+    private static final String PASS = "1234"; // change to your password
 
     private Connection con;
 
@@ -19,8 +18,13 @@ public class Database {
             con = DriverManager.getConnection(URL, USER, PASS);
             try (Statement st = con.createStatement()) {
                 st.executeUpdate("CREATE TABLE IF NOT EXISTS users (" +
-                        "name VARCHAR(50) PRIMARY KEY, contact VARCHAR(100), " +
+                        "name VARCHAR(50) PRIMARY KEY, password VARCHAR(100), contact VARCHAR(100), " +
                         "offered VARCHAR(255), wanted VARCHAR(255))");
+                try {
+                    st.executeUpdate("ALTER TABLE users ADD COLUMN password VARCHAR(100) AFTER name");
+                } catch (SQLException ignored) {
+                    // Column already exists
+                }
             }
             return true;
         } catch (SQLException e) {
@@ -30,15 +34,18 @@ public class Database {
     }
 
     public synchronized void saveUser(User u) {
-        if (con == null) return;
-        String sql = "REPLACE INTO users VALUES (?,?,?,?)";
+        if (con == null || u == null) return;
+        String sql = "REPLACE INTO users VALUES (?,?,?,?,?)";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, u.getName());
-            ps.setString(2, u.getContact());
-            ps.setString(3, String.join(",", u.getOffered()));
-            ps.setString(4, String.join(",", u.getWanted()));
+            ps.setString(2, u.getPassword());
+            ps.setString(3, u.getContact());
+            ps.setString(4, String.join(",", u.getOffered()));
+            ps.setString(5, String.join(",", u.getWanted()));
             ps.executeUpdate();
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public List<User> loadUsers() {
@@ -46,11 +53,22 @@ public class Database {
         if (con == null) return list;
         try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery("SELECT * FROM users")) {
             while (rs.next()) {
-                list.add(new User(rs.getString("name"), rs.getString("contact"),
+                String pwd = "password123";
+                try {
+                    pwd = rs.getString("password");
+                    if (pwd == null || pwd.isEmpty()) pwd = "password123";
+                } catch (SQLException ignored) {}
+
+                list.add(new User(
+                        rs.getString("name"),
+                        pwd,
+                        rs.getString("contact"),
                         Arrays.asList(rs.getString("offered").split(",")),
                         Arrays.asList(rs.getString("wanted").split(","))));
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         return list;
     }
 }

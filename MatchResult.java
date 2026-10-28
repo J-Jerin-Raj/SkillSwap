@@ -2,7 +2,7 @@ import java.util.Collections;
 import java.util.Set;
 
 /**
- * Ranked match card representing compatibility between two users.
+ * [CO2 / CO4]: Ranked match card implementing Comparable for natural ordering.
  * Contains reciprocal overlap, mentorship overlap, shared interests, and affinity percentage.
  */
 public class MatchResult implements Comparable<MatchResult> {
@@ -27,11 +27,14 @@ public class MatchResult implements Comparable<MatchResult> {
         this.matchType = matchType != null ? matchType : "RECIPROCAL";
     }
 
+    // [CO1]: Enhanced switch pattern matching and control statements
     public String getCompatibilityLabel() {
-        if (score >= 90) return "Exceptional Match (" + score + "%)";
-        if (score >= 75) return "Strong Match (" + score + "%)";
-        if (score >= 50) return "Moderate Compatibility (" + score + "%)";
-        return "Potential Connect (" + score + "%)";
+        return switch (score / 10) {
+            case 10, 9 -> "Exceptional Match (" + score + "%)";
+            case 8, 7  -> "Strong Match (" + score + "%)";
+            case 6, 5  -> "Moderate Compatibility (" + score + "%)";
+            default    -> "Potential Connect (" + score + "%)";
+        };
     }
 
     @Override

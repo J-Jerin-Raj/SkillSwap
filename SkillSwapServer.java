@@ -4,10 +4,10 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * Application tier: multithreaded socket server with a worker pool.
+ * [CO3 / CO5]: Multithreaded TCP socket server with worker thread pool.
  * Protocol (one line per request):
- * LOGIN name                                    -> OK|name|contact|offered|wanted or ERROR, then END
- * REGISTER name|contact|skill,skill|skill,skill -> OK|name|contact|offered|wanted or ERROR, then END
+ * LOGIN name|password                           -> OK|name|contact|offered|wanted or ERROR, then END
+ * REGISTER name|password|contact|offered|wanted -> OK|name|contact|offered|wanted or ERROR, then END
  * MATCH name                                    -> formatted human-readable match report, then END
  * MATCH_DATA name                               -> structured match cards for GUI rendering, then END
  * USERS                                         -> lists all users and their skills, then END
@@ -18,6 +18,9 @@ public class SkillSwapServer {
     public static final int DEFAULT_PORT = 5050;
     private static final MatchEngine engine = new MatchEngine();
     private static final Database db = new Database();
+
+    // [CO4]: Queue collection for storing server event audit trail
+    private static final Queue<String> auditLog = new ConcurrentLinkedQueue<>();
 
     public static void main(String[] args) {
         int port = DEFAULT_PORT;
@@ -34,16 +37,16 @@ public class SkillSwapServer {
             db.loadUsers().forEach(engine::addUser);
         }
         if (engine.getUser("Alice") == null) {
-            engine.addUser(new User("Alice", "alice@campus.edu",
+            engine.addUser(new User("Alice", "alice123", "alice@campus.edu",
                     List.of("Godot Engine", "Game Maker", "2D Art"),
                     List.of("Unity", "C#", "Blender")));
-            engine.addUser(new User("Bob", "bob@campus.edu",
+            engine.addUser(new User("Bob", "bob123", "bob@campus.edu",
                     List.of("Unity", "Raylib in C", "C#"),
                     List.of("Godot Engine", "Game Design")));
-            engine.addUser(new User("Cara", "cara@campus.edu",
+            engine.addUser(new User("Cara", "cara123", "cara@campus.edu",
                     List.of("Python", "Data Science", "Machine Learning"),
                     List.of("Unity", "Web Development")));
-            engine.addUser(new User("David", "david@campus.edu",
+            engine.addUser(new User("David", "david123", "david@campus.edu",
                     List.of("Web Development", "React", "JavaScript"),
                     List.of("Python", "Machine Learning")));
         }
@@ -92,20 +95,20 @@ public class SkillSwapServer {
             line = line.trim();
 
             if (line.startsWith("LOGIN ")) {
-                String name = line.substring(6).trim();
-                if (name.isEmpty()) {
-                    out.println("ERROR Please enter your username.");
-                    out.println("END");
-                    return;
-                }
-                User u = engine.getUser(name);
-                if (u != null) {
-                    System.out.println("[INFO] [LOGIN] User '" + u.getName() + "' logged in from " + clientIp);
+                String payload = line.substring(6).trim();
+                String[] parts = payload.split("\\|", 2);
+                String name = parts.length > 0 ? parts[0].trim() : "";
+                String password = parts.length > 1 ? parts[1].trim() : "";
+
+                try {
+                    User u = engine.authenticate(name, password);
+                    auditLog.offer("LOGIN: " + u.getName() + " from " + clientIp);
+                    System.out.println("[INFO] [LOGIN] User '" + u.getName() + "' authenticated from " + clientIp);
                     out.println("OK|" + u.getName() + "|" + u.getContact() + "|"
-                            + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()));
-                } else {
-                    System.out.println("[WARN] [LOGIN] Failed login attempt for unknown user: " + name);
-                    out.println("ERROR User '" + name + "' not found. Please click 'Sign Up' to create your profile.");
+                            + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()) + "|" + u.getPassword());
+                } catch (AuthenticationException e) {
+                    System.out.println("[WARN] [LOGIN] Failed attempt for: " + name + " (" + e.getMessage() + ")");
+                    out.println("ERROR " + e.getMessage());
                 }
                 out.println("END");
 
@@ -113,28 +116,28 @@ public class SkillSwapServer {
                 String payload = line.substring(9).trim();
                 String[] p = payload.split("\\|", -1);
                 String name = p.length > 0 ? p[0].trim() : "";
-                if (name.isEmpty()) {
-                    out.println("ERROR Name cannot be empty.");
-                    out.println("END");
-                    return;
-                }
-                String contact = p.length > 1 ? p[1].trim() : "";
-                List<String> offered = (p.length > 2 && !p[2].trim().isEmpty())
-                        ? Arrays.asList(p[2].split(",")) : Collections.emptyList();
-                List<String> wanted = (p.length > 3 && !p[3].trim().isEmpty())
+                String password = p.length > 1 ? p[1].trim() : "";
+                String contact = p.length > 2 ? p[2].trim() : "";
+                List<String> offered = (p.length > 3 && !p[3].trim().isEmpty())
                         ? Arrays.asList(p[3].split(",")) : Collections.emptyList();
+                List<String> wanted = (p.length > 4 && !p[4].trim().isEmpty())
+                        ? Arrays.asList(p[4].split(",")) : Collections.emptyList();
 
-                User u = new User(name, contact, offered, wanted);
-                engine.addUser(u);
-                db.saveUser(u);
-                System.out.println("[INFO] [REGISTER] User '" + u.getName() + "' registered from " + clientIp);
-                out.println("OK Profile for '" + u.getName() + "' saved successfully!|"
-                        + u.getName() + "|" + u.getContact() + "|"
-                        + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()));
+                try {
+                    User u = engine.registerUser(name, password, contact, offered, wanted);
+                    db.saveUser(u);
+                    auditLog.offer("REGISTER: " + u.getName() + " from " + clientIp);
+                    System.out.println("[INFO] [REGISTER] User '" + u.getName() + "' registered from " + clientIp);
+                    out.println("OK Profile for '" + u.getName() + "' saved successfully!|"
+                            + u.getName() + "|" + u.getContact() + "|"
+                            + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()) + "|" + u.getPassword());
+                } catch (InvalidProfileException e) {
+                    System.out.println("[WARN] [REGISTER] Failed registration: " + e.getMessage());
+                    out.println("ERROR " + e.getMessage());
+                }
                 out.println("END");
 
             } else if (line.startsWith("MATCH_DATA ")) {
-                // Structured data response for client GUI card rendering
                 String name = line.substring(11).trim();
                 User me = engine.getUser(name);
                 if (me == null) {
@@ -189,7 +192,7 @@ public class SkillSwapServer {
                     out.println("Found " + all.size() + " compatible peer(s) ranked by Affinity Score:\n");
                     for (MatchResult r : all) {
                         out.println("--------------------------------------------------");
-                        out.println("★ AFFINITY SCORE: " + r.score + "% | " + r.getCompatibilityLabel());
+                        out.println("[AFFINITY SCORE: " + r.score + "%] | " + r.getCompatibilityLabel());
                         out.println("User: " + r.peer.getName() + " (" + r.peer.getContact() + ")");
                         out.println("Match Type: " + r.matchType);
                         if (!r.theyTeachMe.isEmpty()) {
@@ -234,6 +237,7 @@ public class SkillSwapServer {
                     String msg = p[2].trim();
                     boolean sent = engine.addMessage(from, to, msg);
                     if (sent) {
+                        auditLog.offer("MSG: " + from + " -> " + to);
                         System.out.println("[INFO] [SEND_MSG] Message routed: " + from + " -> " + to);
                         out.println("OK Message sent to " + to);
                     } else {
@@ -251,7 +255,6 @@ public class SkillSwapServer {
                     return;
                 }
 
-                System.out.println("[INFO] [GET_MSGS] Inbox checked by '" + user + "' from " + clientIp);
                 List<String> msgs = engine.getMessages(user);
                 out.println("=== INBOX FOR " + user.toUpperCase() + " (" + msgs.size() + " message(s)) ===");
                 if (msgs.isEmpty()) {

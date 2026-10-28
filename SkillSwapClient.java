@@ -10,31 +10,33 @@ import java.util.*;
 import java.util.List;
 
 /**
- * Modern Presentation Tier for SkillSwap.
+ * [CO5]: Graphical User Interface Design using Swing API, Event Handling, and Socket Networking.
  * Features:
- * - Authentication flow on startup (Sign In vs Sign Up / Add Profile).
- * - Multi-skill and multi-interest management with quick-add chips and live pill preview.
- * - Dynamic Matchmaking feed displaying calculated Affinity Scores, Compatibility badges,
- *   and reciprocal skill breakdown cards.
- * - Direct peer-to-peer messaging and community exploration.
+ * - Clean modern presentation tier without emojis.
+ * - Credential authentication (Username + Password) on Sign In & Sign Up.
+ * - Dynamic 1-second background inbox polling using Swing Timer.
+ * - Multi-skill & multi-interest management with live badge previews.
+ * - Matchmaking feed with Affinity Scores and direct messaging integration.
+ * - Mirrored Profile editor with locked username field.
+ * - File I/O operations for exporting chat logs ([CO4]).
  */
 public class SkillSwapClient extends JFrame {
 
-    // --- UI Theme Palette ---
+    // --- Modern Theme Palette ---
     public static class Theme {
-        public static final Color BG_DARK       = new Color(22, 24, 34);     // Main window background
-        public static final Color CARD_BG       = new Color(30, 33, 48);     // Cards & containers
+        public static final Color BG_DARK       = new Color(22, 24, 34);     // Window background
+        public static final Color CARD_BG       = new Color(30, 33, 48);     // Card panels
         public static final Color CARD_HOVER    = new Color(38, 42, 60);     // Hover state
         public static final Color INPUT_BG      = new Color(40, 44, 64);     // Text fields
         public static final Color INPUT_BORDER  = new Color(60, 66, 95);     // Field borders
-        public static final Color PRIMARY       = new Color(99, 102, 241);   // Indigo primary button
+        public static final Color PRIMARY       = new Color(99, 102, 241);   // Indigo primary
         public static final Color PRIMARY_HOVER = new Color(129, 140, 248);  // Primary hover
-        public static final Color SUCCESS       = new Color(34, 197, 94);    // Green for 80%+ Affinity
-        public static final Color CYAN          = new Color(56, 189, 248);   // Blue/Cyan for Mentors
-        public static final Color AMBER         = new Color(245, 158, 11);   // Amber for Learners
-        public static final Color PURPLE        = new Color(168, 85, 247);   // Purple for Shared Interests
-        public static final Color TEXT_MAIN     = new Color(243, 244, 246);  // Bright white-grey
-        public static final Color TEXT_MUTED    = new Color(156, 163, 175);  // Subtle grey
+        public static final Color SUCCESS       = new Color(34, 197, 94);    // Green
+        public static final Color CYAN          = new Color(56, 189, 248);   // Blue/Cyan
+        public static final Color AMBER         = new Color(245, 158, 11);   // Amber
+        public static final Color PURPLE        = new Color(168, 85, 247);   // Purple
+        public static final Color TEXT_MAIN     = new Color(243, 244, 246);  // Text primary
+        public static final Color TEXT_MUTED    = new Color(156, 163, 175);  // Text subtle
         public static final Color BORDER_SUBTLE = new Color(49, 54, 77);
 
         public static final Font TITLE_FONT   = new Font("SansSerif", Font.BOLD, 22);
@@ -51,26 +53,30 @@ public class SkillSwapClient extends JFrame {
 
     // --- Active Session ---
     private String currentUserName = "";
+    private String currentUserPassword = "";
     private String currentUserContact = "";
     private String currentUserOffered = "";
     private String currentUserWanted = "";
 
-    // --- CardLayout Root ---
+    // --- Navigation & Core Views ---
     private final CardLayout rootCardLayout = new CardLayout();
     private final JPanel rootPanel = new JPanel(rootCardLayout);
+    private JTabbedPane mainTabbedPane; // Direct reference to avoid brittle getParent() chains
 
-    // --- Auth Screen Components ---
+    // --- Auth View Components ---
     private final CardLayout authCardLayout = new CardLayout();
     private final JPanel authCardContainer = new JPanel(authCardLayout);
     private final JTextField loginNameField = createStyledTextField("", 16);
+    private final JPasswordField loginPasswordField = createStyledPasswordField("", 16);
 
-    // Sign Up (Add Profile) Fields
+    // Sign Up Fields
     private final JTextField suNameField = createStyledTextField("", 16);
+    private final JPasswordField suPasswordField = createStyledPasswordField("", 16);
     private final JTextField suContactField = createStyledTextField("", 16);
     private final JTextField suOfferedField = createStyledTextField("", 20);
     private final JTextField suWantedField = createStyledTextField("", 20);
-    private final JPanel offeredPillsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-    private final JPanel wantedPillsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+    private final JPanel suOfferedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+    private final JPanel suWantedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     private final JLabel authStatusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     // --- Dashboard Components ---
@@ -85,55 +91,70 @@ public class SkillSwapClient extends JFrame {
     private final JTextArea inboxTextArea = new JTextArea();
     private final JLabel dashboardStatusLabel = new JLabel("Ready", SwingConstants.LEFT);
 
+    // --- Profile Editor Components (Mirrors Sign Up) ---
+    private final JTextField profNameField = createStyledTextField("", 16);
+    private final JPasswordField profPasswordField = createStyledPasswordField("", 16);
+    private final JTextField profContactField = createStyledTextField("", 16);
+    private final JTextField profOfferedField = createStyledTextField("", 20);
+    private final JTextField profWantedField = createStyledTextField("", 20);
+    private final JPanel profOfferedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+    private final JPanel profWantedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
+
+    // [CO3]: Background Timer checking inbox every 1000ms (1 second)
+    private final javax.swing.Timer inboxAutoTimer;
+    private String lastInboxContent = "";
+
     public SkillSwapClient() {
         this("localhost");
     }
 
     public SkillSwapClient(String defaultHost) {
-        super("SkillSwap — Peer-to-Peer Skill Matching & Communication Platform");
+        super("SkillSwap - Peer-to-Peer Skill Matching & Communication Platform");
         hostField.setText(defaultHost == null || defaultHost.isBlank() ? "localhost" : defaultHost.trim());
 
         setupWindow();
         initAuthScreen();
         initDashboardScreen();
 
+        // [CO3]: 1-second auto inbox poller
+        inboxAutoTimer = new javax.swing.Timer(1000, e -> autoPollInbox());
+
         rootCardLayout.show(rootPanel, "AUTH");
         add(rootPanel);
 
-        // Preload default demo user if desired
+        // Preload default demo user
         loginNameField.setText("Alice");
+        loginPasswordField.setText("alice123");
     }
 
     private void setupWindow() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1020, 760);
-        setMinimumSize(new Dimension(860, 640));
+        setSize(1040, 780);
+        setMinimumSize(new Dimension(880, 660));
         setLocationRelativeTo(null);
         getContentPane().setBackground(Theme.BG_DARK);
     }
 
     // =========================================================================
-    // 1. AUTHENTICATION SCREEN (LOGIN & SIGN UP / ADD PROFILE)
+    // 1. AUTHENTICATION VIEW (SIGN IN & SIGN UP)
     // =========================================================================
     private void initAuthScreen() {
         JPanel authView = new JPanel(new BorderLayout());
         authView.setBackground(Theme.BG_DARK);
 
-        // Top Network Strip
+        // Top Network Settings Strip
         JPanel topNetworkBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
         topNetworkBar.setBackground(Theme.BG_DARK);
         topNetworkBar.setBorder(new EmptyBorder(4, 12, 4, 12));
 
-        JLabel netDot = new JLabel("●");
-        netDot.setForeground(Theme.SUCCESS);
         JLabel netLabel = new JLabel("Server IP:");
         netLabel.setFont(Theme.SMALL_FONT);
         netLabel.setForeground(Theme.TEXT_MUTED);
+
         JLabel portLabel = new JLabel("Port:");
         portLabel.setFont(Theme.SMALL_FONT);
         portLabel.setForeground(Theme.TEXT_MUTED);
 
-        topNetworkBar.add(netDot);
         topNetworkBar.add(netLabel);
         topNetworkBar.add(hostField);
         topNetworkBar.add(portLabel);
@@ -144,16 +165,16 @@ public class SkillSwapClient extends JFrame {
         centerWrap.setBackground(Theme.BG_DARK);
 
         RoundedPanel authBox = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
-        authBox.setPreferredSize(new Dimension(580, 610));
+        authBox.setPreferredSize(new Dimension(600, 630));
         authBox.setLayout(new BorderLayout());
-        authBox.setBorder(new EmptyBorder(20, 24, 20, 24));
+        authBox.setBorder(new EmptyBorder(22, 26, 22, 26));
 
-        // Header
+        // Header Panel
         JPanel headerPanel = new JPanel();
         headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
         headerPanel.setOpaque(false);
 
-        JLabel logoLabel = new JLabel("🔄 SkillSwap");
+        JLabel logoLabel = new JLabel("SkillSwap");
         logoLabel.setFont(Theme.TITLE_FONT);
         logoLabel.setForeground(Theme.TEXT_MAIN);
         logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -171,7 +192,8 @@ public class SkillSwapClient extends JFrame {
         // Segmented Switcher Bar (Sign In / Sign Up)
         JPanel switcherPanel = new JPanel(new GridLayout(1, 2, 8, 0));
         switcherPanel.setOpaque(false);
-        switcherPanel.setPreferredSize(new Dimension(320, 36));
+        switcherPanel.setPreferredSize(new Dimension(360, 38));
+        switcherPanel.setMaximumSize(new Dimension(360, 38));
 
         ModernButton tabSignInBtn = new ModernButton("Sign In", Theme.PRIMARY, Theme.PRIMARY_HOVER);
         ModernButton tabSignUpBtn = new ModernButton("Create Profile (Sign Up)", Theme.CARD_HOVER, Theme.PRIMARY);
@@ -194,9 +216,9 @@ public class SkillSwapClient extends JFrame {
         switcherPanel.add(tabSignUpBtn);
 
         headerPanel.add(switcherPanel);
-        headerPanel.add(Box.createVerticalStrut(12));
+        headerPanel.add(Box.createVerticalStrut(10));
 
-        // Forms Container
+        // Form Cards Container
         authCardContainer.setOpaque(false);
         authCardContainer.add(buildLoginForm(tabSignUpBtn), "LOGIN");
         authCardContainer.add(buildSignUpForm(tabSignInBtn), "SIGNUP");
@@ -217,150 +239,192 @@ public class SkillSwapClient extends JFrame {
     }
 
     private JPanel buildLoginForm(ModernButton switchToSignUpBtn) {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        p.setOpaque(false);
-        p.setBorder(new EmptyBorder(16, 10, 10, 10));
+        JPanel formWrap = new JPanel();
+        formWrap.setLayout(new BoxLayout(formWrap, BoxLayout.Y_AXIS));
+        formWrap.setOpaque(false);
+        formWrap.setBorder(new EmptyBorder(16, 20, 10, 20));
 
-        JLabel info = new JLabel("Enter your registered username to continue:");
+        JLabel info = new JLabel("Enter your registered credentials to sign in:");
         info.setFont(Theme.REGULAR_FONT);
         info.setForeground(Theme.TEXT_MUTED);
+        info.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel userLbl = new JLabel("Username / Name:");
         userLbl.setFont(Theme.BOLD_FONT);
         userLbl.setForeground(Theme.TEXT_MAIN);
+        userLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel passLbl = new JLabel("Password:");
+        passLbl.setFont(Theme.BOLD_FONT);
+        passLbl.setForeground(Theme.TEXT_MAIN);
+        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         ModernButton loginBtn = new ModernButton("Sign In to SkillSwap", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        loginBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 42));
+        loginBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
+        loginBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         loginBtn.addActionListener(e -> handleLogin());
-        loginNameField.addActionListener(e -> handleLogin());
+        loginNameField.addActionListener(e -> loginPasswordField.requestFocusInWindow());
+        loginPasswordField.addActionListener(e -> handleLogin());
 
-        p.add(info);
-        p.add(Box.createVerticalStrut(14));
-        p.add(userLbl);
-        p.add(Box.createVerticalStrut(6));
-        p.add(loginNameField);
-        p.add(Box.createVerticalStrut(18));
-        p.add(loginBtn);
-        p.add(Box.createVerticalStrut(16));
+        formWrap.add(info);
+        formWrap.add(Box.createVerticalStrut(14));
+        formWrap.add(userLbl);
+        formWrap.add(Box.createVerticalStrut(4));
+        formWrap.add(loginNameField);
+        formWrap.add(Box.createVerticalStrut(10));
+        formWrap.add(passLbl);
+        formWrap.add(Box.createVerticalStrut(4));
+        formWrap.add(loginPasswordField);
+        formWrap.add(Box.createVerticalStrut(16));
+        formWrap.add(loginBtn);
+        formWrap.add(Box.createVerticalStrut(14));
 
         // Quick demo user buttons
         JLabel quickLbl = new JLabel("Quick Demo Profiles:");
         quickLbl.setFont(Theme.SMALL_FONT);
         quickLbl.setForeground(Theme.TEXT_MUTED);
-        p.add(quickLbl);
-        p.add(Box.createVerticalStrut(6));
+        quickLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        formWrap.add(quickLbl);
+        formWrap.add(Box.createVerticalStrut(6));
 
         JPanel demoBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         demoBar.setOpaque(false);
-        for (String demo : new String[]{"Alice", "Bob", "Cara", "David"}) {
-            JButton b = createChipButton(demo, Theme.CARD_HOVER, Theme.TEXT_MAIN);
+        demoBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        String[][] demoUsers = {
+            {"Alice", "alice123"},
+            {"Bob", "bob123"},
+            {"Cara", "cara123"},
+            {"David", "david123"}
+        };
+
+        for (String[] demo : demoUsers) {
+            JButton b = createChipButton(demo[0], Theme.CARD_HOVER, Theme.TEXT_MAIN);
             b.addActionListener(ev -> {
-                loginNameField.setText(demo);
+                loginNameField.setText(demo[0]);
+                loginPasswordField.setText(demo[1]);
                 handleLogin();
             });
             demoBar.add(b);
         }
-        p.add(demoBar);
+        formWrap.add(demoBar);
 
-        p.add(Box.createVerticalGlue());
+        formWrap.add(Box.createVerticalGlue());
 
-        JButton linkBtn = createTextLinkButton("Don't have a profile yet? Click here to Sign Up →");
+        JButton linkBtn = createTextLinkButton("Don't have a profile yet? Click here to Sign Up ->");
         linkBtn.addActionListener(e -> switchToSignUpBtn.doClick());
         linkBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        p.add(linkBtn);
+        formWrap.add(linkBtn);
 
-        return p;
+        return formWrap;
     }
 
     private JPanel buildSignUpForm(ModernButton switchToSignInBtn) {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-        p.setOpaque(false);
-        p.setBorder(new EmptyBorder(6, 4, 4, 4));
+        JPanel formWrap = new JPanel();
+        formWrap.setLayout(new BoxLayout(formWrap, BoxLayout.Y_AXIS));
+        formWrap.setOpaque(false);
+        formWrap.setBorder(new EmptyBorder(8, 10, 4, 10));
 
-        // Name
-        JLabel nameLbl = new JLabel("Full Name / Username *:");
+        // Username
+        JLabel nameLbl = new JLabel("Username / Name *:");
         nameLbl.setFont(Theme.BOLD_FONT);
         nameLbl.setForeground(Theme.TEXT_MAIN);
+        nameLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Password
+        JLabel passLbl = new JLabel("Password *:");
+        passLbl.setFont(Theme.BOLD_FONT);
+        passLbl.setForeground(Theme.TEXT_MAIN);
+        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         // Contact
         JLabel contactLbl = new JLabel("Contact (Email / Discord / Phone) *:");
         contactLbl.setFont(Theme.BOLD_FONT);
         contactLbl.setForeground(Theme.TEXT_MAIN);
+        contactLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         // Skills Offered
         JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (Multiple, comma-separated) *:");
         offeredLbl.setFont(Theme.BOLD_FONT);
         offeredLbl.setForeground(Theme.SUCCESS);
+        offeredLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel quickOffered = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         quickOffered.setOpaque(false);
+        quickOffered.setAlignmentX(Component.LEFT_ALIGNMENT);
         for (String skill : new String[]{"Java", "Python", "React", "C++", "DSA", "Unity", "UI/UX"}) {
             JButton chip = createChipButton("+ " + skill, Theme.INPUT_BG, Theme.TEXT_MUTED);
             chip.addActionListener(e -> appendSkill(suOfferedField, skill));
             quickOffered.add(chip);
         }
 
-        offeredPillsPanel.setOpaque(false);
-        attachPillUpdater(suOfferedField, offeredPillsPanel, Theme.SUCCESS);
+        suOfferedPills.setOpaque(false);
+        suOfferedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
+        attachPillUpdater(suOfferedField, suOfferedPills, Theme.SUCCESS);
 
-        // Skills Wanted (Interests)
+        // Skills Wanted
         JLabel wantedLbl = new JLabel("Interests / Skills I Want To Learn (Multiple, comma-separated) *:");
         wantedLbl.setFont(Theme.BOLD_FONT);
         wantedLbl.setForeground(Theme.CYAN);
+        wantedLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel quickWanted = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         quickWanted.setOpaque(false);
+        quickWanted.setAlignmentX(Component.LEFT_ALIGNMENT);
         for (String skill : new String[]{"Machine Learning", "Godot", "Flutter", "Spring Boot", "Docker"}) {
             JButton chip = createChipButton("+ " + skill, Theme.INPUT_BG, Theme.TEXT_MUTED);
             chip.addActionListener(e -> appendSkill(suWantedField, skill));
             quickWanted.add(chip);
         }
 
-        wantedPillsPanel.setOpaque(false);
-        attachPillUpdater(suWantedField, wantedPillsPanel, Theme.CYAN);
+        suWantedPills.setOpaque(false);
+        suWantedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
+        attachPillUpdater(suWantedField, suWantedPills, Theme.CYAN);
 
         ModernButton signUpBtn = new ModernButton("Complete Sign Up & Enter Dashboard", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        signUpBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
+        signUpBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 38));
+        signUpBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         signUpBtn.addActionListener(e -> handleSignUp());
 
-        p.add(nameLbl);
-        p.add(Box.createVerticalStrut(3));
-        p.add(suNameField);
-        p.add(Box.createVerticalStrut(6));
+        formWrap.add(nameLbl);
+        formWrap.add(Box.createVerticalStrut(2));
+        formWrap.add(suNameField);
+        formWrap.add(Box.createVerticalStrut(4));
 
-        p.add(contactLbl);
-        p.add(Box.createVerticalStrut(3));
-        p.add(suContactField);
-        p.add(Box.createVerticalStrut(8));
+        formWrap.add(passLbl);
+        formWrap.add(Box.createVerticalStrut(2));
+        formWrap.add(suPasswordField);
+        formWrap.add(Box.createVerticalStrut(4));
 
-        p.add(offeredLbl);
-        p.add(Box.createVerticalStrut(3));
-        p.add(suOfferedField);
-        p.add(Box.createVerticalStrut(2));
-        p.add(quickOffered);
-        p.add(offeredPillsPanel);
-        p.add(Box.createVerticalStrut(6));
+        formWrap.add(contactLbl);
+        formWrap.add(Box.createVerticalStrut(2));
+        formWrap.add(suContactField);
+        formWrap.add(Box.createVerticalStrut(6));
 
-        p.add(wantedLbl);
-        p.add(Box.createVerticalStrut(3));
-        p.add(suWantedField);
-        p.add(Box.createVerticalStrut(2));
-        p.add(quickWanted);
-        p.add(wantedPillsPanel);
-        p.add(Box.createVerticalStrut(10));
+        formWrap.add(offeredLbl);
+        formWrap.add(Box.createVerticalStrut(2));
+        formWrap.add(suOfferedField);
+        formWrap.add(quickOffered);
+        formWrap.add(suOfferedPills);
+        formWrap.add(Box.createVerticalStrut(4));
 
-        p.add(signUpBtn);
+        formWrap.add(wantedLbl);
+        formWrap.add(Box.createVerticalStrut(2));
+        formWrap.add(suWantedField);
+        formWrap.add(quickWanted);
+        formWrap.add(suWantedPills);
+        formWrap.add(Box.createVerticalStrut(8));
 
-        JButton link = createTextLinkButton("Already registered? Sign In instead");
+        formWrap.add(signUpBtn);
+
+        JButton link = createTextLinkButton("Already registered? Sign In instead ->");
         link.addActionListener(e -> switchToSignInBtn.doClick());
         link.setAlignmentX(Component.CENTER_ALIGNMENT);
-        p.add(Box.createVerticalStrut(4));
-        p.add(link);
+        formWrap.add(Box.createVerticalStrut(4));
+        formWrap.add(link);
 
-        return p;
+        return formWrap;
     }
 
     private void appendSkill(JTextField field, String skill) {
@@ -368,7 +432,6 @@ public class SkillSwapClient extends JFrame {
         if (current.isEmpty()) {
             field.setText(skill);
         } else {
-            // check if not already present
             List<String> list = Arrays.asList(current.split("\\s*,\\s*"));
             if (!list.contains(skill)) {
                 field.setText(current + ", " + skill);
@@ -401,7 +464,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 2. MAIN DASHBOARD SCREEN (MATCHMAKING, DIRECTORY, CHAT)
+    // 2. MAIN DASHBOARD VIEW
     // =========================================================================
     private void initDashboardScreen() {
         JPanel dashView = new JPanel(new BorderLayout());
@@ -412,12 +475,9 @@ public class SkillSwapClient extends JFrame {
         topBar.setBackground(Theme.CARD_BG);
         topBar.setBorder(new EmptyBorder(10, 16, 10, 16));
 
-        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        brandPanel.setOpaque(false);
-        JLabel logo = new JLabel("🔄 SkillSwap");
-        logo.setFont(Theme.SUBTITLE_FONT);
-        logo.setForeground(Theme.TEXT_MAIN);
-        brandPanel.add(logo);
+        JLabel brandLogo = new JLabel("SkillSwap");
+        brandLogo.setFont(Theme.SUBTITLE_FONT);
+        brandLogo.setForeground(Theme.TEXT_MAIN);
 
         JPanel rightUserPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         rightUserPanel.setOpaque(false);
@@ -425,32 +485,29 @@ public class SkillSwapClient extends JFrame {
         userSessionLabel.setFont(Theme.REGULAR_FONT);
         userSessionLabel.setForeground(Theme.CYAN);
 
-        ModernButton refreshBtn = new ModernButton("⚡ Find Matches", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        ModernButton refreshBtn = new ModernButton("Find Matches", Theme.PRIMARY, Theme.PRIMARY_HOVER);
         refreshBtn.addActionListener(e -> loadMatches());
 
         ModernButton signOutBtn = new ModernButton("Sign Out", Theme.INPUT_BG, Theme.CARD_HOVER);
-        signOutBtn.addActionListener(e -> {
-            currentUserName = "";
-            rootCardLayout.show(rootPanel, "AUTH");
-        });
+        signOutBtn.addActionListener(e -> handleSignOut());
 
         rightUserPanel.add(userSessionLabel);
         rightUserPanel.add(refreshBtn);
         rightUserPanel.add(signOutBtn);
 
-        topBar.add(brandPanel, BorderLayout.WEST);
+        topBar.add(brandLogo, BorderLayout.WEST);
         topBar.add(rightUserPanel, BorderLayout.EAST);
 
         // Center Content Tabs
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.setBackground(Theme.BG_DARK);
-        tabbedPane.setForeground(Theme.TEXT_MAIN);
-        tabbedPane.setFont(Theme.BOLD_FONT);
+        mainTabbedPane = new JTabbedPane();
+        mainTabbedPane.setBackground(Theme.BG_DARK);
+        mainTabbedPane.setForeground(Theme.TEXT_MAIN);
+        mainTabbedPane.setFont(Theme.BOLD_FONT);
 
-        tabbedPane.addTab("🎯 Matchmaking & Affinity Feed", buildMatchesTab());
-        tabbedPane.addTab("👥 Community Directory", buildDirectoryTab());
-        tabbedPane.addTab("💬 Direct Messaging & Inbox", buildMessagingTab());
-        tabbedPane.addTab("⚙️ My Profile", buildProfileTab());
+        mainTabbedPane.addTab("Matchmaking Feed", buildMatchesTab());
+        mainTabbedPane.addTab("Community Directory", buildDirectoryTab());
+        mainTabbedPane.addTab("Direct Messaging & Inbox", buildMessagingTab());
+        mainTabbedPane.addTab("My Profile", buildProfileTab());
 
         // Bottom Status Bar
         JPanel bottomBar = new JPanel(new BorderLayout());
@@ -461,7 +518,7 @@ public class SkillSwapClient extends JFrame {
         bottomBar.add(dashboardStatusLabel, BorderLayout.WEST);
 
         dashView.add(topBar, BorderLayout.NORTH);
-        dashView.add(tabbedPane, BorderLayout.CENTER);
+        dashView.add(mainTabbedPane, BorderLayout.CENTER);
         dashView.add(bottomBar, BorderLayout.SOUTH);
 
         rootPanel.add(dashView, "DASHBOARD");
@@ -472,11 +529,10 @@ public class SkillSwapClient extends JFrame {
         p.setBackground(Theme.BG_DARK);
         p.setBorder(new EmptyBorder(12, 14, 12, 14));
 
-        // Sub-header controls
         JPanel controlBar = new JPanel(new BorderLayout());
         controlBar.setBackground(Theme.BG_DARK);
 
-        JLabel intro = new JLabel("Compatible Peers & Mentors ranked by calculated Affinity Score:");
+        JLabel intro = new JLabel("Compatible Peers ranked by calculated Affinity Score:");
         intro.setFont(Theme.SUBTITLE_FONT);
         intro.setForeground(Theme.TEXT_MAIN);
 
@@ -487,7 +543,7 @@ public class SkillSwapClient extends JFrame {
         toggleRawReportCheck.setForeground(Theme.TEXT_MUTED);
         toggleRawReportCheck.setOpaque(false);
 
-        ModernButton matchBtn = new ModernButton("🔄 Refresh Matches", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        ModernButton matchBtn = new ModernButton("Refresh Matches", Theme.PRIMARY, Theme.PRIMARY_HOVER);
         matchBtn.addActionListener(e -> loadMatches());
 
         rightControls.add(toggleRawReportCheck);
@@ -496,7 +552,6 @@ public class SkillSwapClient extends JFrame {
         controlBar.add(intro, BorderLayout.WEST);
         controlBar.add(rightControls, BorderLayout.EAST);
 
-        // Feed Container (Card View vs Raw Text View)
         JPanel feedCardPanel = new JPanel(new CardLayout());
         feedCardPanel.setBackground(Theme.BG_DARK);
 
@@ -566,7 +621,6 @@ public class SkillSwapClient extends JFrame {
         p.setBackground(Theme.BG_DARK);
         p.setBorder(new EmptyBorder(12, 14, 12, 14));
 
-        // Send Form
         RoundedPanel sendCard = new RoundedPanel(12, Theme.CARD_BG, Theme.BORDER_SUBTLE);
         sendCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
 
@@ -579,10 +633,10 @@ public class SkillSwapClient extends JFrame {
         msgLbl.setForeground(Theme.TEXT_MAIN);
 
         ModernButton sendBtn = new ModernButton("Send Message", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        ModernButton checkInboxBtn = new ModernButton("Check Inbox", Theme.INPUT_BG, Theme.CARD_HOVER);
+        ModernButton exportLogBtn = new ModernButton("Export Chat Log", Theme.INPUT_BG, Theme.CARD_HOVER);
 
         sendBtn.addActionListener(e -> handleSendMessage());
-        checkInboxBtn.addActionListener(e -> handleCheckInbox());
+        exportLogBtn.addActionListener(e -> exportChatLogToFile());
         msgTextField.addActionListener(e -> handleSendMessage());
 
         sendCard.add(toLbl);
@@ -590,9 +644,8 @@ public class SkillSwapClient extends JFrame {
         sendCard.add(msgLbl);
         sendCard.add(msgTextField);
         sendCard.add(sendBtn);
-        sendCard.add(checkInboxBtn);
+        sendCard.add(exportLogBtn);
 
-        // Inbox View
         inboxTextArea.setEditable(false);
         inboxTextArea.setFont(Theme.MONO_FONT);
         inboxTextArea.setBackground(Theme.CARD_BG);
@@ -607,89 +660,191 @@ public class SkillSwapClient extends JFrame {
         return p;
     }
 
+    // =========================================================================
+    // 3. FIXED MY PROFILE VIEW (MIRRORS SIGN UP WITH GREYED-OUT USERNAME)
+    // =========================================================================
     private JPanel buildProfileTab() {
-        JPanel wrap = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 20));
+        JPanel wrap = new JPanel(new GridBagLayout());
         wrap.setBackground(Theme.BG_DARK);
 
-        RoundedPanel card = new RoundedPanel(16, Theme.CARD_BG, Theme.BORDER_SUBTLE);
-        card.setPreferredSize(new Dimension(540, 480));
+        RoundedPanel card = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
+        card.setPreferredSize(new Dimension(620, 600));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(20, 24, 20, 24));
+        card.setBorder(new EmptyBorder(20, 26, 20, 26));
 
-        JLabel title = new JLabel("Active User Profile Settings");
+        JLabel title = new JLabel("My Profile Settings");
         title.setFont(Theme.TITLE_FONT);
         title.setForeground(Theme.TEXT_MAIN);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JTextField editName = createStyledTextField("", 16);
-        JTextField editContact = createStyledTextField("", 16);
-        JTextField editOffered = createStyledTextField("", 20);
-        JTextField editWanted = createStyledTextField("", 20);
+        // Greyed out Username
+        JLabel nameLbl = new JLabel("Username (Locked / Permanent):");
+        nameLbl.setFont(Theme.BOLD_FONT);
+        nameLbl.setForeground(Theme.TEXT_MUTED);
+        nameLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        ModernButton saveEditBtn = new ModernButton("Update Profile on Server", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        saveEditBtn.addActionListener(e -> {
-            String name = editName.getText().trim();
-            if (name.isEmpty()) return;
-            executeNetwork("REGISTER " + name + "|" + editContact.getText().trim()
-                    + "|" + editOffered.getText().trim() + "|" + editWanted.getText().trim(), resp -> {
-                currentUserName = name;
-                currentUserContact = editContact.getText().trim();
-                currentUserOffered = editOffered.getText().trim();
-                currentUserWanted = editWanted.getText().trim();
-                userSessionLabel.setText("👤 " + currentUserName + " (" + currentUserContact + ")");
-                dashboardStatusLabel.setText("Profile updated successfully!");
-                loadMatches();
+        profNameField.setEnabled(false);
+        profNameField.setEditable(false);
+        profNameField.setBackground(Theme.CARD_HOVER);
+        profNameField.setForeground(Theme.TEXT_MUTED);
+
+        // Password
+        JLabel passLbl = new JLabel("Account Password:");
+        passLbl.setFont(Theme.BOLD_FONT);
+        passLbl.setForeground(Theme.TEXT_MAIN);
+        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Contact
+        JLabel contactLbl = new JLabel("Contact (Email / Discord / Phone):");
+        contactLbl.setFont(Theme.BOLD_FONT);
+        contactLbl.setForeground(Theme.TEXT_MAIN);
+        contactLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Skills Offered
+        JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (Multiple, comma-separated):");
+        offeredLbl.setFont(Theme.BOLD_FONT);
+        offeredLbl.setForeground(Theme.SUCCESS);
+        offeredLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel quickOffered = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        quickOffered.setOpaque(false);
+        quickOffered.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (String skill : new String[]{"Java", "Python", "React", "C++", "DSA", "Unity", "UI/UX"}) {
+            JButton chip = createChipButton("+ " + skill, Theme.INPUT_BG, Theme.TEXT_MUTED);
+            chip.addActionListener(e -> appendSkill(profOfferedField, skill));
+            quickOffered.add(chip);
+        }
+
+        profOfferedPills.setOpaque(false);
+        profOfferedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
+        attachPillUpdater(profOfferedField, profOfferedPills, Theme.SUCCESS);
+
+        // Skills Wanted
+        JLabel wantedLbl = new JLabel("Interests / Skills I Want To Learn (Multiple, comma-separated):");
+        wantedLbl.setFont(Theme.BOLD_FONT);
+        wantedLbl.setForeground(Theme.CYAN);
+        wantedLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel quickWanted = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        quickWanted.setOpaque(false);
+        quickWanted.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (String skill : new String[]{"Machine Learning", "Godot", "Flutter", "Spring Boot", "Docker"}) {
+            JButton chip = createChipButton("+ " + skill, Theme.INPUT_BG, Theme.TEXT_MUTED);
+            chip.addActionListener(e -> appendSkill(profWantedField, skill));
+            quickWanted.add(chip);
+        }
+
+        profWantedPills.setOpaque(false);
+        profWantedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
+        attachPillUpdater(profWantedField, profWantedPills, Theme.CYAN);
+
+        ModernButton saveProfileBtn = new ModernButton("Save Profile Changes", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        saveProfileBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
+        saveProfileBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        saveProfileBtn.addActionListener(e -> {
+            String name = profNameField.getText().trim();
+            String pwd = new String(profPasswordField.getPassword()).trim();
+            String contact = profContactField.getText().trim();
+            String offered = profOfferedField.getText().trim();
+            String wanted = profWantedField.getText().trim();
+
+            if (name.isEmpty() || pwd.isEmpty()) {
+                dashboardStatusLabel.setText("Username and password cannot be empty.");
+                return;
+            }
+
+            dashboardStatusLabel.setText("Updating profile on server...");
+            executeNetwork("REGISTER " + name + "|" + pwd + "|" + contact + "|" + offered + "|" + wanted, resp -> {
+                if (resp.startsWith("OK")) {
+                    currentUserName = name;
+                    currentUserPassword = pwd;
+                    currentUserContact = contact;
+                    currentUserOffered = offered;
+                    currentUserWanted = wanted;
+                    userSessionLabel.setText("User: " + currentUserName + (contact.isEmpty() ? "" : " (" + contact + ")"));
+                    dashboardStatusLabel.setText("Profile updated successfully on server!");
+                    loadMatches();
+                } else {
+                    dashboardStatusLabel.setText(resp);
+                }
             });
         });
 
-        // Populate initially
-        editName.setText(currentUserName);
-        editContact.setText(currentUserContact);
-        editOffered.setText(currentUserOffered);
-        editWanted.setText(currentUserWanted);
-
         card.add(title);
-        card.add(Box.createVerticalStrut(14));
-        card.add(new JLabel("Username:"));
-        card.add(editName);
-        card.add(Box.createVerticalStrut(8));
-        card.add(new JLabel("Contact Information:"));
-        card.add(editContact);
-        card.add(Box.createVerticalStrut(8));
-        card.add(new JLabel("Skills Offered (Teaching):"));
-        card.add(editOffered);
-        card.add(Box.createVerticalStrut(8));
-        card.add(new JLabel("Interests (Learning Goals):"));
-        card.add(editWanted);
-        card.add(Box.createVerticalStrut(16));
-        card.add(saveEditBtn);
+        card.add(Box.createVerticalStrut(10));
+        card.add(nameLbl);
+        card.add(Box.createVerticalStrut(2));
+        card.add(profNameField);
+        card.add(Box.createVerticalStrut(6));
+
+        card.add(passLbl);
+        card.add(Box.createVerticalStrut(2));
+        card.add(profPasswordField);
+        card.add(Box.createVerticalStrut(6));
+
+        card.add(contactLbl);
+        card.add(Box.createVerticalStrut(2));
+        card.add(profContactField);
+        card.add(Box.createVerticalStrut(6));
+
+        card.add(offeredLbl);
+        card.add(Box.createVerticalStrut(2));
+        card.add(profOfferedField);
+        card.add(quickOffered);
+        card.add(profOfferedPills);
+        card.add(Box.createVerticalStrut(4));
+
+        card.add(wantedLbl);
+        card.add(Box.createVerticalStrut(2));
+        card.add(profWantedField);
+        card.add(quickWanted);
+        card.add(profWantedPills);
+        card.add(Box.createVerticalStrut(10));
+
+        card.add(saveProfileBtn);
 
         wrap.add(card);
         return wrap;
     }
 
+    private void syncProfileFields() {
+        profNameField.setText(currentUserName);
+        profPasswordField.setText(currentUserPassword);
+        profContactField.setText(currentUserContact);
+        profOfferedField.setText(currentUserOffered);
+        profWantedField.setText(currentUserWanted);
+    }
+
     // =========================================================================
-    // 3. ACTION HANDLERS & MATCHMAKING LOGIC
+    // 4. HANDLERS, MATCHMAKING & RELIABLE TAB SWITCHING
     // =========================================================================
     private void handleLogin() {
         String name = loginNameField.getText().trim();
-        if (name.isEmpty()) {
-            authStatusLabel.setText("Please enter your name.");
+        String password = new String(loginPasswordField.getPassword()).trim();
+
+        if (name.isEmpty() || password.isEmpty()) {
+            authStatusLabel.setText("Please enter both username and password.");
             return;
         }
 
-        authStatusLabel.setText("Signing in as '" + name + "'...");
-        executeNetwork("LOGIN " + name, response -> {
+        authStatusLabel.setText("Authenticating credentials for '" + name + "'...");
+        executeNetwork("LOGIN " + name + "|" + password, response -> {
             if (response.startsWith("OK|")) {
                 String[] parts = response.split("\\|", -1);
                 currentUserName = parts.length > 1 ? parts[1].trim() : name;
                 currentUserContact = parts.length > 2 ? parts[2].trim() : "";
                 currentUserOffered = parts.length > 3 ? parts[3].trim() : "";
                 currentUserWanted = parts.length > 4 ? parts[4].trim() : "";
+                currentUserPassword = parts.length > 5 ? parts[5].trim() : password;
 
-                userSessionLabel.setText("👤 " + currentUserName + (currentUserContact.isEmpty() ? "" : " (" + currentUserContact + ")"));
+                userSessionLabel.setText("User: " + currentUserName + (currentUserContact.isEmpty() ? "" : " (" + currentUserContact + ")"));
+                syncProfileFields();
+
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
-                handleCheckInbox();
+                autoPollInbox();
+                inboxAutoTimer.start(); // Start 1-sec auto polling
             } else {
                 authStatusLabel.setText(response.replace("ERROR ", ""));
             }
@@ -698,38 +853,61 @@ public class SkillSwapClient extends JFrame {
 
     private void handleSignUp() {
         String name = suNameField.getText().trim();
+        String password = new String(suPasswordField.getPassword()).trim();
         String contact = suContactField.getText().trim();
         String offered = suOfferedField.getText().trim();
         String wanted = suWantedField.getText().trim();
 
-        if (name.isEmpty()) {
-            authStatusLabel.setText("Please enter a username.");
+        if (name.isEmpty() || password.isEmpty()) {
+            authStatusLabel.setText("Username and password are required.");
             return;
         }
 
         authStatusLabel.setText("Registering profile for '" + name + "'...");
-        executeNetwork("REGISTER " + name + "|" + contact + "|" + offered + "|" + wanted, response -> {
+        executeNetwork("REGISTER " + name + "|" + password + "|" + contact + "|" + offered + "|" + wanted, response -> {
             if (response.startsWith("OK")) {
                 currentUserName = name;
+                currentUserPassword = password;
                 currentUserContact = contact;
                 currentUserOffered = offered;
                 currentUserWanted = wanted;
 
-                userSessionLabel.setText("👤 " + currentUserName + (currentUserContact.isEmpty() ? "" : " (" + currentUserContact + ")"));
+                userSessionLabel.setText("User: " + currentUserName + (currentUserContact.isEmpty() ? "" : " (" + currentUserContact + ")"));
+                syncProfileFields();
+
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
-                dashboardStatusLabel.setText("Account created successfully! Welcome to SkillSwap.");
+                autoPollInbox();
+                inboxAutoTimer.start(); // Start 1-sec auto polling
+                dashboardStatusLabel.setText("Account created successfully. Welcome to SkillSwap!");
             } else {
                 authStatusLabel.setText(response.replace("ERROR ", ""));
             }
         });
     }
 
+    private void handleSignOut() {
+        inboxAutoTimer.stop(); // Stop background polling
+        currentUserName = "";
+        currentUserPassword = "";
+        lastInboxContent = "";
+        inboxTextArea.setText("");
+        rootCardLayout.show(rootPanel, "AUTH");
+    }
+
+    /** Direct method taking user to Chat tab and populating recipient */
+    private void openDirectMessageWith(String recipientName) {
+        msgToField.setText(recipientName);
+        if (mainTabbedPane != null) {
+            mainTabbedPane.setSelectedIndex(2); // Direct Messaging tab
+        }
+        SwingUtilities.invokeLater(() -> msgTextField.requestFocusInWindow());
+    }
+
     private void loadMatches() {
         if (currentUserName.isEmpty()) return;
         dashboardStatusLabel.setText("Computing matches and affinity scores...");
 
-        // Fetch structured cards
         executeNetwork("MATCH_DATA " + currentUserName, dataResponse -> {
             matchesCardsContainer.removeAll();
             String[] lines = dataResponse.split("\n");
@@ -773,7 +951,7 @@ public class SkillSwapClient extends JFrame {
             dashboardStatusLabel.setText("Found " + cardCount + " compatible match(es) for " + currentUserName);
         });
 
-        // Also fetch raw report for text view
+        // Also update text view
         executeNetwork("MATCH " + currentUserName, reportResponse -> {
             matchesRawTextArea.setText(reportResponse);
             matchesRawTextArea.setCaretPosition(0);
@@ -785,9 +963,9 @@ public class SkillSwapClient extends JFrame {
         RoundedPanel card = new RoundedPanel(14, Theme.CARD_BG, Theme.BORDER_SUBTLE);
         card.setLayout(new BorderLayout(12, 10));
         card.setBorder(new EmptyBorder(14, 16, 14, 16));
-        card.setMaximumSize(new Dimension(Short.MAX_VALUE, 160));
+        card.setMaximumSize(new Dimension(Short.MAX_VALUE, 155));
 
-        // Top Row: Avatar Initials + Name + Contact + Affinity Score Bar
+        // Top Row
         JPanel topRow = new JPanel(new BorderLayout());
         topRow.setOpaque(false);
 
@@ -807,12 +985,11 @@ public class SkillSwapClient extends JFrame {
         userMeta.add(nameLbl);
         userMeta.add(contactLbl);
 
-        // Affinity Meter
         JPanel affinityBox = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         affinityBox.setOpaque(false);
 
         Color affinityColor = score >= 80 ? Theme.SUCCESS : (score >= 50 ? Theme.CYAN : Theme.AMBER);
-        String typeBadgeText = matchType.equals("RECIPROCAL") ? "100% Reciprocal Swap" :
+        String typeBadgeText = matchType.equals("RECIPROCAL") ? "Reciprocal Swap" :
                               (matchType.equals("MENTOR") ? "Can Teach You" :
                               (matchType.equals("LEARNER") ? "Wants Your Skills" : "Study Buddy"));
 
@@ -827,7 +1004,7 @@ public class SkillSwapClient extends JFrame {
         topRow.add(userMeta, BorderLayout.WEST);
         topRow.add(affinityBox, BorderLayout.EAST);
 
-        // Center: Compatibility Breakdowns
+        // Center Breakdowns
         JPanel center = new JPanel();
         center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
         center.setOpaque(false);
@@ -873,7 +1050,7 @@ public class SkillSwapClient extends JFrame {
             center.add(r3);
         }
 
-        // Bottom Action Row
+        // Bottom Row
         JPanel bottomRow = new JPanel(new BorderLayout());
         bottomRow.setOpaque(false);
 
@@ -881,14 +1058,9 @@ public class SkillSwapClient extends JFrame {
         allSkillsLbl.setFont(Theme.SMALL_FONT);
         allSkillsLbl.setForeground(Theme.TEXT_MUTED);
 
-        ModernButton chatBtn = new ModernButton("💬 Message " + name, Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        chatBtn.addActionListener(e -> {
-            msgToField.setText(name);
-            msgTextField.requestFocus();
-            // Switch to chat tab
-            JTabbedPane tabs = (JTabbedPane) card.getParent().getParent().getParent().getParent();
-            tabs.setSelectedIndex(2);
-        });
+        ModernButton chatBtn = new ModernButton("Message " + name, Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        // Direct reliable call to open chat
+        chatBtn.addActionListener(e -> openDirectMessageWith(name));
 
         bottomRow.add(allSkillsLbl, BorderLayout.WEST);
         bottomRow.add(chatBtn, BorderLayout.EAST);
@@ -965,11 +1137,7 @@ public class SkillSwapClient extends JFrame {
         left.add(info);
 
         ModernButton msgBtn = new ModernButton("Send Message", Theme.INPUT_BG, Theme.PRIMARY);
-        msgBtn.addActionListener(e -> {
-            msgToField.setText(name);
-            JTabbedPane tabs = (JTabbedPane) card.getParent().getParent().getParent().getParent();
-            tabs.setSelectedIndex(2);
-        });
+        msgBtn.addActionListener(e -> openDirectMessageWith(name));
 
         card.add(left, BorderLayout.WEST);
         card.add(msgBtn, BorderLayout.EAST);
@@ -994,20 +1162,46 @@ public class SkillSwapClient extends JFrame {
         executeNetwork("SEND_MSG " + from + "|" + to + "|" + msg, resp -> {
             dashboardStatusLabel.setText(resp);
             msgTextField.setText("");
-            handleCheckInbox();
+            autoPollInbox(); // Immediately refresh inbox
         });
     }
 
-    private void handleCheckInbox() {
-        if (currentUserName.isEmpty()) return;
-        executeNetwork("GET_MSGS " + currentUserName, resp -> {
-            inboxTextArea.setText(resp);
-            inboxTextArea.setCaretPosition(0);
+    // 1-second auto inbox poll without freezing GUI
+    private void autoPollInbox() {
+        if (currentUserName == null || currentUserName.trim().isEmpty()) return;
+        executeNetworkSilent("GET_MSGS " + currentUserName, resp -> {
+            if (!resp.equals(lastInboxContent)) {
+                lastInboxContent = resp;
+                inboxTextArea.setText(resp);
+                inboxTextArea.setCaretPosition(inboxTextArea.getDocument().getLength());
+            }
         });
+    }
+
+    // [CO4]: File Operations - Exporting chat history to a local text file
+    private void exportChatLogToFile() {
+        String text = inboxTextArea.getText().trim();
+        if (text.isEmpty()) {
+            dashboardStatusLabel.setText("No messages to export.");
+            return;
+        }
+
+        String fileName = "chat_log_" + currentUserName.toLowerCase() + ".txt";
+        File file = new File(fileName);
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
+            bw.write("SkillSwap Chat Log for: " + currentUserName + "\n");
+            bw.write("Exported at: " + new Date() + "\n");
+            bw.write("==================================================\n\n");
+            bw.write(text);
+            bw.write("\n\n==================================================\n");
+            dashboardStatusLabel.setText("Chat log successfully saved to: " + file.getAbsolutePath());
+        } catch (IOException ex) {
+            dashboardStatusLabel.setText("Failed to export chat: " + ex.getMessage());
+        }
     }
 
     // =========================================================================
-    // 4. NETWORKING BRIDGE
+    // 5. NETWORKING UTILITIES
     // =========================================================================
     private void executeNetwork(String request, java.util.function.Consumer<String> callback) {
         String host = hostField.getText().trim();
@@ -1037,12 +1231,36 @@ public class SkillSwapClient extends JFrame {
         }).start();
     }
 
+    private void executeNetworkSilent(String request, java.util.function.Consumer<String> callback) {
+        String host = hostField.getText().trim();
+        final String targetHost = host.isEmpty() ? "localhost" : host;
+        final int targetPort = parseInt(portField.getText().trim(), 5050);
+
+        new Thread(() -> {
+            StringBuilder sb = new StringBuilder();
+            try (Socket s = new Socket(targetHost, targetPort);
+                 PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                 BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
+
+                out.println(request);
+                String line;
+                while ((line = in.readLine()) != null && !line.equals("END")) {
+                    sb.append(line).append("\n");
+                }
+                String result = sb.toString().trim();
+                SwingUtilities.invokeLater(() -> callback.accept(result));
+            } catch (Exception ignored) {
+                // Silent fail for polling background thread
+            }
+        }).start();
+    }
+
     private static int parseInt(String val, int def) {
         try { return Integer.parseInt(val.trim()); } catch (Exception e) { return def; }
     }
 
     // =========================================================================
-    // 5. CUSTOM MODERN SWING COMPONENTS
+    // 6. CUSTOM MODERN SWING CONTROLS (BOUNDED DIMENSIONS)
     // =========================================================================
     private static JTextField createStyledTextField(String text, int cols) {
         JTextField tf = new JTextField(text, cols) {
@@ -1065,7 +1283,39 @@ public class SkillSwapClient extends JFrame {
                 BorderFactory.createLineBorder(Theme.INPUT_BORDER, 1, true),
                 new EmptyBorder(6, 10, 6, 10)
         ));
+        // Crucial fix: bounds maximumSize so BoxLayout never stretches vertically
+        tf.setMaximumSize(new Dimension(Short.MAX_VALUE, 36));
+        tf.setPreferredSize(new Dimension(280, 36));
+        tf.setAlignmentX(Component.LEFT_ALIGNMENT);
         return tf;
+    }
+
+    private static JPasswordField createStyledPasswordField(String text, int cols) {
+        JPasswordField pf = new JPasswordField(text, cols) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getBackground());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                super.paintComponent(g);
+                g2.dispose();
+            }
+        };
+        pf.setOpaque(false);
+        pf.setBackground(Theme.INPUT_BG);
+        pf.setForeground(Theme.TEXT_MAIN);
+        pf.setCaretColor(Theme.TEXT_MAIN);
+        pf.setFont(Theme.REGULAR_FONT);
+        pf.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.INPUT_BORDER, 1, true),
+                new EmptyBorder(6, 10, 6, 10)
+        ));
+        // Crucial fix: bounds maximumSize so BoxLayout never stretches vertically
+        pf.setMaximumSize(new Dimension(Short.MAX_VALUE, 36));
+        pf.setPreferredSize(new Dimension(280, 36));
+        pf.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return pf;
     }
 
     private static JButton createChipButton(String text, Color bg, Color fg) {
@@ -1177,7 +1427,7 @@ public class SkillSwapClient extends JFrame {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 60)); // soft tint
+            g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 60));
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
             g2.setColor(color);
             g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);

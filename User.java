@@ -1,15 +1,16 @@
 import java.util.*;
 
-/** OOP: encapsulated user profile with Offered and Requested skills. */
-public class User {
-    private final String name;
-    private final String contact;
+/**
+ * [CO2]: User entity inheriting AbstractAccount and implementing Matchable.
+ * Demonstrates Inheritance, Polymorphism, and Defensive Encapsulation.
+ */
+public class User extends AbstractAccount implements Matchable {
     private final Set<String> offered = new LinkedHashSet<>();
     private final Set<String> wanted  = new LinkedHashSet<>();
 
-    public User(String name, String contact, Collection<String> offered, Collection<String> wanted) {
-        this.name = name == null ? "" : name.trim();
-        this.contact = contact == null ? "" : contact.trim();
+    public User(String name, String password, String contact,
+                Collection<String> offered, Collection<String> wanted) {
+        super(name, password, contact);
         if (offered != null) {
             for (String s : offered) {
                 String t = s.trim().toLowerCase();
@@ -24,8 +25,24 @@ public class User {
         }
     }
 
-    public String getName()          { return name; }
-    public String getContact()       { return contact; }
-    public Set<String> getOffered()  { return Collections.unmodifiableSet(offered); }
-    public Set<String> getWanted()   { return Collections.unmodifiableSet(wanted); }
+    /** Overloaded constructor defaulting password for backwards compatibility */
+    public User(String name, String contact, Collection<String> offered, Collection<String> wanted) {
+        this(name, "password123", contact, offered, wanted);
+    }
+
+    @Override
+    public Set<String> getOffered() {
+        return Collections.unmodifiableSet(offered);
+    }
+
+    @Override
+    public Set<String> getWanted() {
+        return Collections.unmodifiableSet(wanted);
+    }
+
+    @Override
+    public String getAccountSummary() {
+        return "User: " + name + " | Contact: " + contact +
+               " | Offers: " + offered.size() + " skills | Wants: " + wanted.size() + " skills";
+    }
 }
