@@ -49,7 +49,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // --- Network Settings ---
-    private final JTextField hostField = createStyledTextField("javamp", 10);
+    private final JTextField hostField = createStyledTextField("localhost", 10);
     private final JTextField portField = createStyledTextField("5050", 5);
 
     // --- Active Session ---
@@ -1507,7 +1507,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     public static void main(String[] args) {
-        String host = (args.length > 0) ? args[0] : "localhost";
+        String host = (args.length > 0) ? args[0] : "javamp.local";
         SwingUtilities.invokeLater(() -> new SkillSwapClient(host).setVisible(true));
     }
 }

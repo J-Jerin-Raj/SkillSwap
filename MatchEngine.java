@@ -150,12 +150,12 @@ public class MatchEngine {
         String cleanContent = content.trim();
 
         // Recipient log: Received Message
-        String recvEntry = "[" + time + "] From " + cleanFrom + ": \"" + cleanContent + "\" (Received Message)";
+        String recvEntry = "[" + time + "] From " + cleanFrom + ": " + cleanContent + " (Received Message)";
         inboxes.computeIfAbsent(cleanTo.toLowerCase(), k -> new CopyOnWriteArrayList<>())
                .add(recvEntry);
 
         // Sender log: Sent Message
-        String sentEntry = "[" + time + "] To " + cleanTo + ": \"" + cleanContent + "\" (Sent Message)";
+        String sentEntry = "[" + time + "] To " + cleanTo + ": " + cleanContent + " (Sent Message)";
         inboxes.computeIfAbsent(cleanFrom.toLowerCase(), k -> new CopyOnWriteArrayList<>())
                .add(sentEntry);
 
