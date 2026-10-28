@@ -11,7 +11,7 @@ import java.net.Socket;
  */
 public class SkillSwapClient extends JFrame {
     private final JTextField hostField = new JTextField("localhost", 12);
-    private final JTextField portField = new JTextField("5000", 5);
+    private final JTextField portField = new JTextField("5050", 5);
 
     private final JTextField nameField = new JTextField(12);
     private final JTextField contactField = new JTextField(12);
@@ -153,7 +153,7 @@ public class SkillSwapClient extends JFrame {
      */
     private void send(String request) {
         String host = hostField.getText().trim();
-        int port = 5000;
+        int port = 5050;
         try {
             port = Integer.parseInt(portField.getText().trim());
         } catch (NumberFormatException ignored) {

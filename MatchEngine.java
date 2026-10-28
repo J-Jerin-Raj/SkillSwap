@@ -1,3 +1,4 @@
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -8,7 +9,9 @@ public class MatchEngine {
     private final Map<String, List<String>> inboxes = new ConcurrentHashMap<>();
 
     public void addUser(User u) {
-        users.put(u.getName().toLowerCase(), u);
+        if (u != null && u.getName() != null && !u.getName().trim().isEmpty()) {
+            users.put(u.getName().trim().toLowerCase(), u);
+        }
     }
 
     public User getUser(String name) {
@@ -46,7 +49,21 @@ public class MatchEngine {
         return results;
     }
 
-    /** Find people who want the skills I offer (even if they don't teach what I want). */
+    /** Find people who offer skills that I want to learn (Mentors / Recommendations). */
+    public Map<User, Set<String>> findUsersWhoTeachWhatIWant(User me) {
+        Map<User, Set<String>> map = new LinkedHashMap<>();
+        for (User other : users.values()) {
+            if (other.getName().equalsIgnoreCase(me.getName())) continue;
+            Set<String> overlap = new HashSet<>(me.getWanted());
+            overlap.retainAll(other.getOffered());
+            if (!overlap.isEmpty()) {
+                map.put(other, overlap);
+            }
+        }
+        return map;
+    }
+
+    /** Find people who want the skills I offer (Learners / Demand). */
     public Map<User, Set<String>> findUsersWhoWantMySkills(User me) {
         Map<User, Set<String>> map = new LinkedHashMap<>();
         for (User other : users.values()) {
@@ -62,10 +79,12 @@ public class MatchEngine {
 
     /** Store a direct message between users. */
     public boolean addMessage(String from, String to, String content) {
+        if (to == null || from == null || content == null) return false;
         User recipient = getUser(to);
         if (recipient == null) return false;
+        String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         inboxes.computeIfAbsent(to.trim().toLowerCase(), k -> new CopyOnWriteArrayList<>())
-               .add("[" + new java.util.Date() + "] From " + from + ": " + content);
+               .add("[" + time + "] From " + from.trim() + ": " + content.trim());
         return true;
     }
 
