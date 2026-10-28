@@ -37,11 +37,13 @@ In academic and developer communities, students frequently want to learn new too
 
 ## ✨ Key Features
 
-- **🎯 Reciprocal Matchmaking Algorithm**: Identifies 100% two-way matches where User A teaches what User B wants and User B teaches what User A wants, sorted by match affinity percentage.
-- **🔍 Partial / Demand Discovery**: View peers who want skills you offer, facilitating mentorship and skill discovery even when a 1:1 reciprocal match isn't available.
-- **👥 Directory Listing**: Inspect all registered users and their learning goals across the network.
+- **🎨 Modern Slate Dark UI**: Sleek, contemporary desktop interface with rounded cards, avatar initials, colorful skill badges, and real-time interactive input chips.
+- **🔐 Startup Authentication Flow**: Dedicated Sign In and Sign Up screens on client launch; seamlessly registers multiple skills and learning interests with live tag previews.
+- **🎯 Multi-Skill Affinity Scoring**: Calculates comprehensive compatibility percentages (0-100%) incorporating reciprocal trades, mentor matches, learner demand, and shared study interests.
+- **🔍 360° Discovery Feed**: Visual cards displaying exactly what peers can teach you, what you teach them, and shared learning goals.
+- **👥 Community Directory**: Inspect all registered users and their learning goals across the network.
 - **💬 Direct In-App Messaging**: Real-time communication and inbox management between peers to plan study sessions and exchange notes.
-- **🌐 Cross-Device Networking**: Socket-based client-server design allows execution across multiple laptops connected to the same Wi-Fi or mobile hotspot.
+- **🌐 Cross-Device Networking**: Socket-based client-server design allows execution across multiple laptops connected to the same Wi-Fi or mobile hotspot (Port 5050).
 - **💾 Hybrid Persistence (Zero-Config or MySQL)**: Runs completely in-memory with zero setup required, with automatic fallback and optional persistent storage using MySQL through JDBC.
 
 ---
@@ -241,9 +243,11 @@ The server and clients communicate over plain-text line-based TCP socket command
 
 | Command | Syntax | Description |
 | :--- | :--- | :--- |
-| `REGISTER` | `REGISTER <name>\|<contact>\|<offered,...>\|<wanted,...>` | Saves/updates a user's profile and skills. |
-| `MATCH` | `MATCH <name>` | Computes 2-way reciprocal matches and 1-way demand for user. |
-| `USERS` | `USERS` | Returns a list of all users and their wanted skills. |
+| `LOGIN` | `LOGIN <name>` | Authenticates user; returns profile details if registered. |
+| `REGISTER` | `REGISTER <name>\|<contact>\|<offered,...>\|<wanted,...>` | Saves/updates a user's profile with multiple skills & interests. |
+| `MATCH_DATA` | `MATCH_DATA <name>` | Returns structured match cards for GUI rendering with Affinity Scores. |
+| `MATCH` | `MATCH <name>` | Computes complete text report with affinity rankings. |
+| `USERS` | `USERS` | Returns a list of all users and their offered & wanted skills. |
 | `SEND_MSG` | `SEND_MSG <from>\|<to>\|<message>` | Routes a direct message to recipient's inbox. |
 | `GET_MSGS` | `GET_MSGS <name>` | Retrieves all pending/saved inbox messages for a user. |
 

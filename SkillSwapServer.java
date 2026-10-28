@@ -6,8 +6,10 @@ import java.util.concurrent.*;
 /**
  * Application tier: multithreaded socket server with a worker pool.
  * Protocol (one line per request):
- * REGISTER name|contact|skill,skill|skill,skill -> OK / ERROR, then END
- * MATCH name                                    -> matches, recommendations & demand, then END
+ * LOGIN name                                    -> OK|name|contact|offered|wanted or ERROR, then END
+ * REGISTER name|contact|skill,skill|skill,skill -> OK|name|contact|offered|wanted or ERROR, then END
+ * MATCH name                                    -> formatted human-readable match report, then END
+ * MATCH_DATA name                               -> structured match cards for GUI rendering, then END
  * USERS                                         -> lists all users and their skills, then END
  * SEND_MSG from|to|message                      -> OK / ERROR, then END
  * GET_MSGS name                                 -> all messages for name, then END
@@ -32,9 +34,18 @@ public class SkillSwapServer {
             db.loadUsers().forEach(engine::addUser);
         }
         if (engine.getUser("Alice") == null) {
-            engine.addUser(new User("Alice", "alice@campus.edu", List.of("Godot Engine", "Game Maker"), List.of("Unity")));
-            engine.addUser(new User("Bob", "bob@campus.edu", List.of("Unity", "Raylib in C"), List.of("Godot Engine")));
-            engine.addUser(new User("Cara", "cara@campus.edu", List.of("Python"), List.of("Unity")));
+            engine.addUser(new User("Alice", "alice@campus.edu",
+                    List.of("Godot Engine", "Game Maker", "2D Art"),
+                    List.of("Unity", "C#", "Blender")));
+            engine.addUser(new User("Bob", "bob@campus.edu",
+                    List.of("Unity", "Raylib in C", "C#"),
+                    List.of("Godot Engine", "Game Design")));
+            engine.addUser(new User("Cara", "cara@campus.edu",
+                    List.of("Python", "Data Science", "Machine Learning"),
+                    List.of("Unity", "Web Development")));
+            engine.addUser(new User("David", "david@campus.edu",
+                    List.of("Web Development", "React", "JavaScript"),
+                    List.of("Python", "Machine Learning")));
         }
 
         List<String> ipList = getNetworkInterfacesInfo();
@@ -80,7 +91,25 @@ public class SkillSwapServer {
 
             line = line.trim();
 
-            if (line.startsWith("REGISTER ")) {
+            if (line.startsWith("LOGIN ")) {
+                String name = line.substring(6).trim();
+                if (name.isEmpty()) {
+                    out.println("ERROR Please enter your username.");
+                    out.println("END");
+                    return;
+                }
+                User u = engine.getUser(name);
+                if (u != null) {
+                    System.out.println("[INFO] [LOGIN] User '" + u.getName() + "' logged in from " + clientIp);
+                    out.println("OK|" + u.getName() + "|" + u.getContact() + "|"
+                            + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()));
+                } else {
+                    System.out.println("[WARN] [LOGIN] Failed login attempt for unknown user: " + name);
+                    out.println("ERROR User '" + name + "' not found. Please click 'Sign Up' to create your profile.");
+                }
+                out.println("END");
+
+            } else if (line.startsWith("REGISTER ")) {
                 String payload = line.substring(9).trim();
                 String[] p = payload.split("\\|", -1);
                 String name = p.length > 0 ? p[0].trim() : "";
@@ -98,8 +127,38 @@ public class SkillSwapServer {
                 User u = new User(name, contact, offered, wanted);
                 engine.addUser(u);
                 db.saveUser(u);
-                System.out.println("[INFO] [REGISTER] User '" + u.getName() + "' registered/updated from " + clientIp);
-                out.println("OK Profile for '" + u.getName() + "' saved successfully!");
+                System.out.println("[INFO] [REGISTER] User '" + u.getName() + "' registered from " + clientIp);
+                out.println("OK Profile for '" + u.getName() + "' saved successfully!|"
+                        + u.getName() + "|" + u.getContact() + "|"
+                        + String.join(",", u.getOffered()) + "|" + String.join(",", u.getWanted()));
+                out.println("END");
+
+            } else if (line.startsWith("MATCH_DATA ")) {
+                // Structured data response for client GUI card rendering
+                String name = line.substring(11).trim();
+                User me = engine.getUser(name);
+                if (me == null) {
+                    out.println("ERROR User '" + name + "' not found.");
+                    out.println("END");
+                    return;
+                }
+
+                List<MatchResult> list = engine.computeAllMatches(me);
+                out.println("CURRENT_USER|" + me.getName() + "|" + me.getContact() + "|"
+                        + String.join(",", me.getOffered()) + "|" + String.join(",", me.getWanted()));
+
+                for (MatchResult r : list) {
+                    out.println("MATCH_CARD|"
+                            + r.peer.getName() + "|"
+                            + r.peer.getContact() + "|"
+                            + String.join(",", r.peer.getOffered()) + "|"
+                            + String.join(",", r.peer.getWanted()) + "|"
+                            + String.join(",", r.theyTeachMe) + "|"
+                            + String.join(",", r.iTeachThem) + "|"
+                            + String.join(",", r.sharedInterests) + "|"
+                            + r.score + "|"
+                            + r.matchType);
+                }
                 out.println("END");
 
             } else if (line.startsWith("MATCH ")) {
@@ -112,63 +171,38 @@ public class SkillSwapServer {
 
                 User me = engine.getUser(name);
                 if (me == null) {
-                    out.println("ERROR User '" + name + "' not found. Please click 'Save Profile' first.");
+                    out.println("ERROR User '" + name + "' not found. Please click 'Sign Up' first.");
                     out.println("END");
                     return;
                 }
 
                 System.out.println("[INFO] [MATCH] Matchmaking query for '" + me.getName() + "' from " + clientIp);
+                List<MatchResult> all = engine.computeAllMatches(me);
 
                 out.println("==================================================");
                 out.println("       MATCH & RECOMMENDATION RESULTS FOR: " + me.getName().toUpperCase());
                 out.println("==================================================");
 
-                // 1. Reciprocal Matches (Two-way mutual matches)
-                List<MatchResult> matches = engine.findMatches(me);
-                out.println("\n--- 1. MUTUAL MATCHES (Reciprocal Skill Swap) ---");
-                if (matches.isEmpty()) {
-                    out.println("No direct two-way matches found yet.");
+                if (all.isEmpty()) {
+                    out.println("No matching peers found based on your skills and wanted interests.");
                 } else {
-                    out.println("Found " + matches.size() + " reciprocal match(es):");
-                    for (MatchResult r : matches) {
+                    out.println("Found " + all.size() + " compatible peer(s) ranked by Affinity Score:\n");
+                    for (MatchResult r : all) {
                         out.println("--------------------------------------------------");
-                        out.println("★ RECIPROCAL MATCH: " + r.score + "% Affinity with " + r.peer.getName());
-                        out.println("Contact: " + r.peer.getContact());
-                        out.println("-> They teach you       : " + r.theyTeachMe);
-                        out.println("-> You teach them       : " + r.iTeachThem);
-                        out.println("-> What they want overall: " + r.peer.getWanted());
-                        out.println("-> All skills they offer: " + r.peer.getOffered());
-                    }
-                }
-
-                // 2. Mentors / Recommendations: Users who have skills you want to learn
-                Map<User, Set<String>> teachers = engine.findUsersWhoTeachWhatIWant(me);
-                out.println("\n--- 2. RECOMMENDATIONS (Users Who Teach What You Want) ---");
-                if (teachers.isEmpty()) {
-                    out.println("No users currently teach the skills you want (" + me.getWanted() + ").");
-                } else {
-                    for (Map.Entry<User, Set<String>> entry : teachers.entrySet()) {
-                        User peer = entry.getKey();
-                        out.println("--------------------------------------------------");
-                        out.println("User: " + peer.getName() + " (" + peer.getContact() + ")");
-                        out.println("-> Can teach you: " + entry.getValue());
-                        out.println("-> What they are looking to learn: " + peer.getWanted());
-                        out.println("-> All skills they offer: " + peer.getOffered());
-                    }
-                }
-
-                // 3. Learners / Demand: Users who want skills you offer
-                Map<User, Set<String>> learners = engine.findUsersWhoWantMySkills(me);
-                out.println("\n--- 3. LEARNERS (Users Who Want The Skills You Offer) ---");
-                if (learners.isEmpty()) {
-                    out.println("No users are currently looking for skills you offer (" + me.getOffered() + ").");
-                } else {
-                    for (Map.Entry<User, Set<String>> entry : learners.entrySet()) {
-                        User peer = entry.getKey();
-                        out.println("--------------------------------------------------");
-                        out.println("User: " + peer.getName() + " (" + peer.getContact() + ")");
-                        out.println("-> Wants to learn from you: " + entry.getValue());
-                        out.println("-> Skills they can teach in return: " + peer.getOffered());
+                        out.println("★ AFFINITY SCORE: " + r.score + "% | " + r.getCompatibilityLabel());
+                        out.println("User: " + r.peer.getName() + " (" + r.peer.getContact() + ")");
+                        out.println("Match Type: " + r.matchType);
+                        if (!r.theyTeachMe.isEmpty()) {
+                            out.println("-> They teach you  : " + r.theyTeachMe);
+                        }
+                        if (!r.iTeachThem.isEmpty()) {
+                            out.println("-> You teach them  : " + r.iTeachThem);
+                        }
+                        if (!r.sharedInterests.isEmpty()) {
+                            out.println("-> Shared Interests: " + r.sharedInterests);
+                        }
+                        out.println("-> All they OFFER  : " + r.peer.getOffered());
+                        out.println("-> What they WANT  : " + r.peer.getWanted());
                     }
                 }
                 out.println("END");
