@@ -11,8 +11,11 @@ import java.util.concurrent.*;
  * MATCH name                                    -> formatted human-readable match report, then END
  * MATCH_DATA name                               -> structured match cards for GUI rendering, then END
  * USERS                                         -> lists all users and their skills, then END
- * SEND_MSG from|to|message                      -> OK / ERROR, then END
- * GET_MSGS name                                 -> all messages for name, then END
+ * SEND_MSG from|to|message                      -> OK / ERROR, then END (to = user, comma-users, or code)
+ * GET_MSGS name[|partnerOrCode]                 -> conversation with header [=== CHAT WITH ... [CODE] ===], then END
+ * JOIN_GROUP name|code                          -> OK / ERROR, then END
+ * GET_GROUP_MSGS name|code                      -> group conversation history, then END
+ * GET_USER_GROUPS name                          -> all active group chats for user, then END
  */
 public class SkillSwapServer {
     public static final int DEFAULT_PORT = 5050;
@@ -49,6 +52,11 @@ public class SkillSwapServer {
             engine.addUser(new User("David", "david123", "david@campus.edu",
                     List.of("Web Development", "React", "JavaScript"),
                     List.of("Python", "Machine Learning")));
+
+            // Seed sample conversation between Alice and Bob
+            engine.getOrCreateChatRoom("Alice", List.of("Bob"));
+            engine.addMessage("Alice", "Bob", "Hello Bob, are you up for a Godot and Unity skill swap?");
+            engine.addMessage("Bob", "Alice", "Hey Alice, definitely! Let's swap skills.");
         }
 
         List<String> ipList = getNetworkInterfacesInfo();
@@ -241,14 +249,18 @@ public class SkillSwapServer {
                         System.out.println("[INFO] [SEND_MSG] Message routed: " + from + " -> " + to);
                         out.println("OK Message sent to " + to);
                     } else {
-                        System.out.println("[WARN] [SEND_MSG] Failed: Recipient '" + to + "' not found");
-                        out.println("ERROR Recipient '" + to + "' does not exist. They must register first.");
+                        System.out.println("[WARN] [SEND_MSG] Failed: Recipient(s) '" + to + "' not found");
+                        out.println("ERROR Recipient(s) '" + to + "' not found. They must register first or check the chat code.");
                     }
                 }
                 out.println("END");
 
             } else if (line.startsWith("GET_MSGS ")) {
-                String user = line.substring(9).trim();
+                String payload = line.substring(9).trim();
+                String[] parts = payload.split("\\|", 2);
+                String user = parts[0].trim();
+                String partnerOrCode = parts.length > 1 ? parts[1].trim() : "";
+
                 if (user.isEmpty()) {
                     out.println("ERROR Please specify your user name.");
                     out.println("END");
@@ -256,13 +268,61 @@ public class SkillSwapServer {
                 }
 
                 List<String> msgs = engine.getMessages(user);
-                out.println("=== INBOX FOR " + user.toUpperCase() + " (" + msgs.size() + " message(s)) ===");
+                String header = engine.getChatHeader(user, partnerOrCode, msgs.size());
+                out.println(header);
                 if (msgs.isEmpty()) {
                     out.println("No messages received yet.");
                 } else {
                     for (String m : msgs) {
                         out.println(m);
                     }
+                }
+                out.println("END");
+
+            } else if (line.startsWith("JOIN_GROUP ")) {
+                String payload = line.substring(11).trim();
+                String[] p = payload.split("\\|", 2);
+                String user = p.length > 0 ? p[0].trim() : "";
+                String code = p.length > 1 ? p[1].trim().toUpperCase() : "";
+
+                GroupChat chat = engine.joinGroupChat(user, code);
+                if (chat != null) {
+                    System.out.println("[INFO] [JOIN_GROUP] " + user + " joined group [" + code + "]");
+                    out.println("OK Joined group chat [" + code + "] with " + chat.getOtherMembersDisplay(user) + "|" + code + "|" + chat.getOtherMembersDisplay(user));
+                } else {
+                    out.println("ERROR Invalid 5-letter chat code '" + code + "'. Please verify the code and try again.");
+                }
+                out.println("END");
+
+            } else if (line.startsWith("GET_GROUP_MSGS ")) {
+                String payload = line.substring(15).trim();
+                String[] p = payload.split("\\|", 2);
+                String user = p.length > 0 ? p[0].trim() : "";
+                String code = p.length > 1 ? p[1].trim().toUpperCase() : "";
+
+                GroupChat chat = engine.getChatByCode(code);
+                if (chat != null) {
+                    List<String> history = chat.getMessageHistory();
+                    out.println("=== CHAT WITH " + chat.getOtherMembersDisplay(user).toUpperCase() + " [" + chat.getCode() + "] (" + history.size() + " message(s)) ===");
+                    if (history.isEmpty()) {
+                        out.println("No messages in this group chat yet. Be the first to say hi!");
+                    } else {
+                        for (String m : history) {
+                            out.println(m);
+                        }
+                    }
+                } else {
+                    out.println("=== CHAT (0 message(s)) ===");
+                    out.println("Group chat room not found.");
+                }
+                out.println("END");
+
+            } else if (line.startsWith("GET_USER_GROUPS ")) {
+                String user = line.substring(16).trim();
+                List<GroupChat> list = engine.getUserGroupChats(user);
+                out.println("GROUPS_START");
+                for (GroupChat gc : list) {
+                    out.println("GROUP|" + gc.getCode() + "|" + gc.getOtherMembersDisplay(user) + "|" + gc.getMembers().size() + "|" + gc.getMessageHistory().size());
                 }
                 out.println("END");
 

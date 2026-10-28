@@ -5,7 +5,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
- * [CO3 / CO4]: Thread-safe matching engine and message router.
+ * [CO3 / CO4]: Thread-safe matching engine, message router, and group chat manager.
  * Demonstrates Concurrent Collections, Lambda/Stream transformations,
  * and User-defined Exception handling.
  */
@@ -13,6 +13,11 @@ public class MatchEngine {
     // [CO4]: Concurrent Collections Framework
     private final Map<String, User> users = new ConcurrentHashMap<>();
     private final Map<String, List<String>> inboxes = new ConcurrentHashMap<>();
+
+    // Multi-user Group Chats indexed by 5-letter unique code
+    private final Map<String, GroupChat> groupChats = new ConcurrentHashMap<>();
+    // Tracks the latest active chat partner or room code per user
+    private final Map<String, String> userActiveChatPartner = new ConcurrentHashMap<>();
 
     public void addUser(User u) {
         if (u != null && u.getName() != null && !u.getName().trim().isEmpty()) {
@@ -139,27 +144,176 @@ public class MatchEngine {
                 .collect(Collectors.toList());
     }
 
+    // =========================================================================
+    // GROUP CHAT & 5-LETTER CODE MANAGEMENT
+    // =========================================================================
+
+    /**
+     * Finds or creates a group chat for the given participants, assigning a unique 5-letter code.
+     */
+    public synchronized GroupChat getOrCreateChatRoom(String user1, Collection<String> otherUsers) {
+        Set<String> memberSet = new LinkedHashSet<>();
+        if (user1 != null && !user1.trim().isEmpty()) {
+            memberSet.add(user1.trim().toLowerCase());
+        }
+        if (otherUsers != null) {
+            for (String u : otherUsers) {
+                if (u != null && !u.trim().isEmpty()) {
+                    memberSet.add(u.trim().toLowerCase());
+                }
+            }
+        }
+
+        // Check if an existing room already has these exact members
+        for (GroupChat gc : groupChats.values()) {
+            if (gc.getMembers().equals(memberSet)) {
+                return gc;
+            }
+        }
+
+        // Generate unique 5-letter code
+        String code;
+        do {
+            code = GroupChat.generateCode();
+        } while (groupChats.containsKey(code));
+
+        GroupChat chat = new GroupChat(code, memberSet);
+        groupChats.put(code, chat);
+        return chat;
+    }
+
+    public GroupChat getChatByCode(String code) {
+        if (code == null) return null;
+        return groupChats.get(code.trim().toUpperCase());
+    }
+
+    public synchronized GroupChat joinGroupChat(String username, String code) {
+        GroupChat chat = getChatByCode(code);
+        if (chat == null || username == null || username.trim().isEmpty()) return null;
+        chat.addMember(username);
+        String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        String joinMsg = "[" + time + "] " + username.trim() + " joined the chat [" + chat.getCode() + "]";
+        chat.addMessage(joinMsg);
+
+        // Store notification for all members
+        for (String m : chat.getMembers()) {
+            inboxes.computeIfAbsent(m.toLowerCase(), k -> new CopyOnWriteArrayList<>()).add(joinMsg);
+        }
+        userActiveChatPartner.put(username.trim().toLowerCase(), chat.getCode());
+        return chat;
+    }
+
+    public List<GroupChat> getUserGroupChats(String username) {
+        if (username == null || username.trim().isEmpty()) return Collections.emptyList();
+        String u = username.trim().toLowerCase();
+        return groupChats.values().stream()
+                .filter(gc -> gc.hasMember(u))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Sends a direct or multi-user message.
+     * Supports:
+     * - 'to' as a 5-letter room code (e.g. A8K2P)
+     * - 'to' as multiple comma-separated users (e.g. "Cara, Nate")
+     * - 'to' as a single user (e.g. "Alice")
+     */
     public boolean addMessage(String from, String to, String content) {
         if (to == null || from == null || content == null) return false;
-        User recipient = getUser(to);
-        if (recipient == null) return false;
-        String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-
         String cleanFrom = from.trim();
         String cleanTo = to.trim();
         String cleanContent = content.trim();
+        if (cleanFrom.isEmpty() || cleanTo.isEmpty() || cleanContent.isEmpty()) return false;
 
-        // Recipient log: Received Message
+        String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+
+        // Case 1: 'to' is an existing 5-letter room code
+        GroupChat codeRoom = getChatByCode(cleanTo);
+        if (codeRoom != null) {
+            codeRoom.addMember(cleanFrom);
+            String otherMembers = codeRoom.getOtherMembersDisplay(cleanFrom);
+            String sentEntry = "[" + time + "] To " + otherMembers + ": " + cleanContent + " (Sent Message)";
+            String recvEntry = "[" + time + "] From " + cleanFrom + ": " + cleanContent + " (Received Message)";
+
+            codeRoom.addMessage(sentEntry);
+            inboxes.computeIfAbsent(cleanFrom.toLowerCase(), k -> new CopyOnWriteArrayList<>()).add(sentEntry);
+
+            for (String member : codeRoom.getMembers()) {
+                if (!member.equalsIgnoreCase(cleanFrom)) {
+                    inboxes.computeIfAbsent(member.toLowerCase(), k -> new CopyOnWriteArrayList<>()).add(recvEntry);
+                    userActiveChatPartner.put(member.toLowerCase(), codeRoom.getCode());
+                }
+            }
+            userActiveChatPartner.put(cleanFrom.toLowerCase(), codeRoom.getCode());
+            return true;
+        }
+
+        // Case 2: 'to' is comma-separated users or single user
+        List<String> recipients = Arrays.stream(cleanTo.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty() && !s.equalsIgnoreCase(cleanFrom))
+                .collect(Collectors.toList());
+
+        if (recipients.isEmpty()) return false;
+
+        // Verify recipients exist (or at least one exists)
+        boolean anyExists = recipients.stream().anyMatch(r -> getUser(r) != null);
+        if (!anyExists) return false;
+
+        // Get or create GroupChat for this exact conversation group
+        GroupChat chat = getOrCreateChatRoom(cleanFrom, recipients);
+        String otherMembersDisplay = chat.getOtherMembersDisplay(cleanFrom);
+
+        // Sender log entry
+        String sentEntry = "[" + time + "] To " + otherMembersDisplay + ": " + cleanContent + " (Sent Message)";
+        inboxes.computeIfAbsent(cleanFrom.toLowerCase(), k -> new CopyOnWriteArrayList<>()).add(sentEntry);
+        chat.addMessage(sentEntry);
+
+        // Recipient log entry for each other participant
         String recvEntry = "[" + time + "] From " + cleanFrom + ": " + cleanContent + " (Received Message)";
-        inboxes.computeIfAbsent(cleanTo.toLowerCase(), k -> new CopyOnWriteArrayList<>())
-               .add(recvEntry);
+        for (String rcp : recipients) {
+            inboxes.computeIfAbsent(rcp.toLowerCase(), k -> new CopyOnWriteArrayList<>()).add(recvEntry);
+            userActiveChatPartner.put(rcp.toLowerCase(), chat.getCode());
+        }
 
-        // Sender log: Sent Message
-        String sentEntry = "[" + time + "] To " + cleanTo + ": " + cleanContent + " (Sent Message)";
-        inboxes.computeIfAbsent(cleanFrom.toLowerCase(), k -> new CopyOnWriteArrayList<>())
-               .add(sentEntry);
-
+        userActiveChatPartner.put(cleanFrom.toLowerCase(), chat.getCode());
         return true;
+    }
+
+    /**
+     * Generates the header: === CHAT WITH <NAME> [CODE] (<count> message(s)) ===
+     */
+    public String getChatHeader(String username, String partnerOrCode, int count) {
+        if (username == null) return "=== CHAT (0 message(s)) ===";
+        String cleanUser = username.trim();
+
+        GroupChat chat = null;
+        if (partnerOrCode != null && !partnerOrCode.trim().isEmpty()) {
+            chat = getChatByCode(partnerOrCode.trim());
+            if (chat == null) {
+                List<String> others = Arrays.stream(partnerOrCode.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toList());
+                if (!others.isEmpty()) {
+                    chat = getOrCreateChatRoom(cleanUser, others);
+                }
+            }
+        }
+
+        if (chat == null) {
+            String lastCode = userActiveChatPartner.get(cleanUser.toLowerCase());
+            if (lastCode != null) {
+                chat = getChatByCode(lastCode);
+            }
+        }
+
+        if (chat != null) {
+            String others = chat.getOtherMembersDisplay(cleanUser).toUpperCase();
+            return "=== CHAT WITH " + others + " [" + chat.getCode() + "] (" + count + " message(s)) ===";
+        }
+
+        return "=== CHAT FOR " + cleanUser.toUpperCase() + " (" + count + " message(s)) ===";
     }
 
     public List<String> getMessages(String user) {

@@ -14,11 +14,12 @@ import java.util.List;
  * Features:
  * - Clean modern presentation tier without emojis.
  * - Perfectly aligned, balanced Sign In and Sign Up views with credential authentication.
- * - Dynamic 1-second background inbox polling using Swing Timer.
+ * - Group Chat module with 5-letter room codes and multi-user chat broadcasting.
+ * - Direct Messaging supporting multiple comma-separated recipients (e.g. "nate, alice").
+ * - Dynamic 1-second background inbox and group chat polling using Swing Timer.
  * - Multi-skill & multi-interest management with live badge previews.
  * - Matchmaking feed with Affinity Scores and direct messaging integration.
  * - Mirrored Profile editor with locked username field.
- * - Sent and Received message tracking ("Sent Message" / "Received Message").
  * - File I/O operations for exporting chat logs ([CO4]).
  */
 public class SkillSwapClient extends JFrame {
@@ -90,10 +91,18 @@ public class SkillSwapClient extends JFrame {
     private final JCheckBox toggleRawReportCheck = new JCheckBox("Show Raw Terminal Report", false);
 
     private final JPanel usersContainer = new JPanel();
-    private final JTextField msgToField = createStyledTextField("", 12);
+    private final JTextField msgToField = createStyledTextField("", 14);
     private final JTextField msgTextField = createStyledTextField("", 24);
     private final JTextArea inboxTextArea = new JTextArea();
     private final JLabel dashboardStatusLabel = new JLabel("Ready", SwingConstants.LEFT);
+
+    // --- Group Chat Components ---
+    private final JTextField joinGroupCodeField = createStyledTextField("", 8);
+    private final JComboBox<String> activeGroupsCombo = new JComboBox<>();
+    private final JTextArea groupChatTextArea = new JTextArea();
+    private final JTextField groupMsgTextField = createStyledTextField("", 24);
+    private String currentGroupCode = "";
+    private String lastGroupChatContent = "";
 
     // --- Profile Editor Components (Mirrors Sign Up) ---
     private final JTextField profNameField = createStyledTextField("", 16);
@@ -133,8 +142,8 @@ public class SkillSwapClient extends JFrame {
 
     private void setupWindow() {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1040, 780);
-        setMinimumSize(new Dimension(880, 660));
+        setSize(1060, 800);
+        setMinimumSize(new Dimension(900, 680));
         setLocationRelativeTo(null);
         getContentPane().setBackground(Theme.BG_DARK);
     }
@@ -146,7 +155,6 @@ public class SkillSwapClient extends JFrame {
         JPanel authView = new JPanel(new BorderLayout());
         authView.setBackground(Theme.BG_DARK);
 
-        // Top Network Settings Bar
         JPanel topNetworkBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
         topNetworkBar.setBackground(Theme.BG_DARK);
         topNetworkBar.setBorder(new EmptyBorder(4, 12, 4, 12));
@@ -164,7 +172,6 @@ public class SkillSwapClient extends JFrame {
         topNetworkBar.add(portLabel);
         topNetworkBar.add(portField);
 
-        // Center Wrapper
         JPanel centerWrap = new JPanel(new GridBagLayout());
         centerWrap.setBackground(Theme.BG_DARK);
 
@@ -186,7 +193,6 @@ public class SkillSwapClient extends JFrame {
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(22, 28, 22, 28));
 
-        // Header
         JLabel logo = new JLabel("SkillSwap");
         logo.setFont(Theme.TITLE_FONT);
         logo.setForeground(Theme.TEXT_MAIN);
@@ -197,7 +203,6 @@ public class SkillSwapClient extends JFrame {
         sub.setForeground(Theme.TEXT_MUTED);
         sub.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Switcher Bar (320px)
         JPanel switcher = new JPanel(new GridLayout(1, 2, 8, 0));
         switcher.setOpaque(false);
         switcher.setPreferredSize(new Dimension(320, 36));
@@ -215,7 +220,6 @@ public class SkillSwapClient extends JFrame {
         switcher.add(tabSignIn);
         switcher.add(tabSignUp);
 
-        // Centered Form Column (360px wide)
         JPanel formCol = new JPanel();
         formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
         formCol.setOpaque(false);
@@ -255,7 +259,6 @@ public class SkillSwapClient extends JFrame {
         formCol.add(Box.createVerticalStrut(6));
         formCol.add(loginStatusLabel);
 
-        // Demo Accounts Row
         JLabel demoLbl = new JLabel("Quick Demo Profiles:");
         demoLbl.setFont(Theme.SMALL_FONT);
         demoLbl.setForeground(Theme.TEXT_MUTED);
@@ -308,7 +311,6 @@ public class SkillSwapClient extends JFrame {
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(18, 26, 16, 26));
 
-        // Header
         JLabel logo = new JLabel("SkillSwap");
         logo.setFont(Theme.TITLE_FONT);
         logo.setForeground(Theme.TEXT_MAIN);
@@ -319,7 +321,6 @@ public class SkillSwapClient extends JFrame {
         sub.setForeground(Theme.TEXT_MUTED);
         sub.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Switcher Bar (320px)
         JPanel switcher = new JPanel(new GridLayout(1, 2, 8, 0));
         switcher.setOpaque(false);
         switcher.setPreferredSize(new Dimension(320, 36));
@@ -337,7 +338,6 @@ public class SkillSwapClient extends JFrame {
         switcher.add(tabSignIn);
         switcher.add(tabSignUp);
 
-        // Centered Form Column (480px wide)
         JPanel formCol = new JPanel();
         formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
         formCol.setOpaque(false);
@@ -510,7 +510,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 2. MAIN DASHBOARD VIEW
+    // 2. MAIN DASHBOARD VIEW (INCLUDES NEW GROUP CHAT MODULE TAB)
     // =========================================================================
     private void initDashboardScreen() {
         JPanel dashView = new JPanel(new BorderLayout());
@@ -544,7 +544,7 @@ public class SkillSwapClient extends JFrame {
         topBar.add(brandLogo, BorderLayout.WEST);
         topBar.add(rightUserPanel, BorderLayout.EAST);
 
-        // Center Content Tabs
+        // Center Content Tabs (Group Chat comes after Direct Messaging and before My Profile)
         mainTabbedPane = new JTabbedPane();
         mainTabbedPane.setBackground(Theme.BG_DARK);
         mainTabbedPane.setForeground(Theme.TEXT_MAIN);
@@ -553,7 +553,15 @@ public class SkillSwapClient extends JFrame {
         mainTabbedPane.addTab("Matchmaking Feed", buildMatchesTab());
         mainTabbedPane.addTab("Community Directory", buildDirectoryTab());
         mainTabbedPane.addTab("Direct Messaging & Inbox", buildMessagingTab());
+        mainTabbedPane.addTab("Group Chat", buildGroupChatTab());
         mainTabbedPane.addTab("My Profile", buildProfileTab());
+
+        // When user switches to Group Chat tab, refresh their active group rooms
+        mainTabbedPane.addChangeListener(e -> {
+            if (mainTabbedPane.getSelectedIndex() == 3) {
+                refreshUserGroupRooms();
+            }
+        });
 
         // Bottom Status Bar
         JPanel bottomBar = new JPanel(new BorderLayout());
@@ -707,7 +715,179 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 3. FIXED MY PROFILE VIEW (MIRRORS SIGN UP WITH GREYED-OUT USERNAME)
+    // 3. NEW GROUP CHAT MODULE TAB (5-LETTER CODE ROOMS)
+    // =========================================================================
+    private JPanel buildGroupChatTab() {
+        JPanel p = new JPanel(new BorderLayout(10, 10));
+        p.setBackground(Theme.BG_DARK);
+        p.setBorder(new EmptyBorder(12, 14, 12, 14));
+
+        // Top Control Card: Join by 5-Letter Code or Select Active Room
+        RoundedPanel controlCard = new RoundedPanel(12, Theme.CARD_BG, Theme.BORDER_SUBTLE);
+        controlCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
+
+        JLabel codeLbl = new JLabel("Join by 5-Letter Code:");
+        codeLbl.setFont(Theme.BOLD_FONT);
+        codeLbl.setForeground(Theme.CYAN);
+
+        joinGroupCodeField.setFont(new Font("Monospaced", Font.BOLD, 13));
+        joinGroupCodeField.setForeground(Theme.CYAN);
+        joinGroupCodeField.setHorizontalAlignment(JTextField.CENTER);
+
+        ModernButton joinBtn = new ModernButton("Join Group Chat", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        joinBtn.addActionListener(e -> handleJoinGroup());
+        joinGroupCodeField.addActionListener(e -> handleJoinGroup());
+
+        JLabel roomLbl = new JLabel("My Active Rooms:");
+        roomLbl.setFont(Theme.BOLD_FONT);
+        roomLbl.setForeground(Theme.TEXT_MAIN);
+
+        activeGroupsCombo.setPreferredSize(new Dimension(240, 34));
+        activeGroupsCombo.setBackground(Theme.INPUT_BG);
+        activeGroupsCombo.setForeground(Theme.TEXT_MAIN);
+        activeGroupsCombo.setFont(Theme.REGULAR_FONT);
+
+        activeGroupsCombo.addActionListener(e -> {
+            String selected = (String) activeGroupsCombo.getSelectedItem();
+            if (selected != null && selected.contains("[") && selected.contains("]")) {
+                int start = selected.indexOf('[') + 1;
+                int end = selected.indexOf(']');
+                currentGroupCode = selected.substring(start, end).trim();
+                loadGroupMessages(currentGroupCode);
+            }
+        });
+
+        ModernButton refreshRoomsBtn = new ModernButton("Refresh Rooms", Theme.INPUT_BG, Theme.CARD_HOVER);
+        refreshRoomsBtn.addActionListener(e -> refreshUserGroupRooms());
+
+        controlCard.add(codeLbl);
+        controlCard.add(joinGroupCodeField);
+        controlCard.add(joinBtn);
+        controlCard.add(Box.createHorizontalStrut(10));
+        controlCard.add(roomLbl);
+        controlCard.add(activeGroupsCombo);
+        controlCard.add(refreshRoomsBtn);
+
+        // Group Message History Display
+        groupChatTextArea.setEditable(false);
+        groupChatTextArea.setFont(Theme.MONO_FONT);
+        groupChatTextArea.setBackground(Theme.CARD_BG);
+        groupChatTextArea.setForeground(Theme.TEXT_MAIN);
+        groupChatTextArea.setBorder(new EmptyBorder(12, 12, 12, 12));
+        groupChatTextArea.setText("=== GROUP CHAT MODULE ===\nJoin a group chat by entering its 5-letter code above, or select an active room.\nDirect chats automatically form a group room with a 5-letter invite code!");
+        JScrollPane groupScroll = new JScrollPane(groupChatTextArea);
+        groupScroll.setBorder(null);
+
+        // Bottom Send Card
+        RoundedPanel bottomSendCard = new RoundedPanel(12, Theme.CARD_BG, Theme.BORDER_SUBTLE);
+        bottomSendCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
+
+        JLabel sendLbl = new JLabel("Send to Room:");
+        sendLbl.setFont(Theme.BOLD_FONT);
+        sendLbl.setForeground(Theme.TEXT_MAIN);
+
+        ModernButton sendGroupBtn = new ModernButton("Send to Group", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        sendGroupBtn.addActionListener(e -> handleSendGroupMessage());
+        groupMsgTextField.addActionListener(e -> handleSendGroupMessage());
+
+        ModernButton copyCodeBtn = new ModernButton("Copy Room Code", Theme.INPUT_BG, Theme.CARD_HOVER);
+        copyCodeBtn.addActionListener(e -> {
+            if (!currentGroupCode.isEmpty()) {
+                java.awt.datatransfer.StringSelection sel = new java.awt.datatransfer.StringSelection(currentGroupCode);
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+                dashboardStatusLabel.setText("Room code '" + currentGroupCode + "' copied to clipboard! Share it with friends.");
+            } else {
+                dashboardStatusLabel.setText("No active group room selected.");
+            }
+        });
+
+        bottomSendCard.add(sendLbl);
+        bottomSendCard.add(groupMsgTextField);
+        bottomSendCard.add(sendGroupBtn);
+        bottomSendCard.add(copyCodeBtn);
+
+        p.add(controlCard, BorderLayout.NORTH);
+        p.add(groupScroll, BorderLayout.CENTER);
+        p.add(bottomSendCard, BorderLayout.SOUTH);
+
+        return p;
+    }
+
+    private void handleJoinGroup() {
+        String code = joinGroupCodeField.getText().trim().toUpperCase();
+        if (code.isEmpty()) {
+            dashboardStatusLabel.setText("Please enter a 5-letter group chat code.");
+            return;
+        }
+
+        dashboardStatusLabel.setText("Joining group chat [" + code + "]...");
+        executeNetwork("JOIN_GROUP " + currentUserName + "|" + code, resp -> {
+            if (resp.startsWith("OK")) {
+                dashboardStatusLabel.setText(resp);
+                joinGroupCodeField.setText("");
+                currentGroupCode = code;
+                refreshUserGroupRooms();
+                loadGroupMessages(code);
+            } else {
+                dashboardStatusLabel.setText(resp);
+            }
+        });
+    }
+
+    private void refreshUserGroupRooms() {
+        if (currentUserName == null || currentUserName.trim().isEmpty()) return;
+        executeNetwork("GET_USER_GROUPS " + currentUserName, resp -> {
+            activeGroupsCombo.removeAllItems();
+            String[] lines = resp.split("\n");
+            for (String line : lines) {
+                if (line.startsWith("GROUP|")) {
+                    String[] p = line.split("\\|", -1);
+                    if (p.length > 2) {
+                        String code = p[1];
+                        String others = p[2];
+                        activeGroupsCombo.addItem(others + " [" + code + "]");
+                    }
+                }
+            }
+            if (activeGroupsCombo.getItemCount() > 0) {
+                if (currentGroupCode.isEmpty()) {
+                    String first = (String) activeGroupsCombo.getItemAt(0);
+                    int s = first.indexOf('[') + 1;
+                    int end = first.indexOf(']');
+                    currentGroupCode = first.substring(s, end).trim();
+                }
+                loadGroupMessages(currentGroupCode);
+            }
+        });
+    }
+
+    private void loadGroupMessages(String code) {
+        if (code == null || code.isEmpty() || currentUserName.isEmpty()) return;
+        executeNetwork("GET_GROUP_MSGS " + currentUserName + "|" + code, resp -> {
+            lastGroupChatContent = resp;
+            groupChatTextArea.setText(resp);
+            groupChatTextArea.setCaretPosition(groupChatTextArea.getDocument().getLength());
+        });
+    }
+
+    private void handleSendGroupMessage() {
+        String msg = groupMsgTextField.getText().trim();
+        if (currentGroupCode.isEmpty()) {
+            dashboardStatusLabel.setText("Please join or select an active group room first.");
+            return;
+        }
+        if (msg.isEmpty()) return;
+
+        dashboardStatusLabel.setText("Sending message to group [" + currentGroupCode + "]...");
+        executeNetwork("SEND_MSG " + currentUserName + "|" + currentGroupCode + "|" + msg, resp -> {
+            dashboardStatusLabel.setText(resp);
+            groupMsgTextField.setText("");
+            loadGroupMessages(currentGroupCode);
+        });
+    }
+
+    // =========================================================================
+    // 4. FIXED MY PROFILE VIEW (MIRRORS SIGN UP WITH GREYED-OUT USERNAME)
     // =========================================================================
     private JPanel buildProfileTab() {
         JPanel wrap = new JPanel(new GridBagLayout());
@@ -728,7 +908,6 @@ public class SkillSwapClient extends JFrame {
         sub.setForeground(Theme.TEXT_MUTED);
         sub.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Centered Form Column (480px)
         JPanel formCol = new JPanel();
         formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
         formCol.setOpaque(false);
@@ -874,7 +1053,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 4. ACTION HANDLERS & NAVIGATION
+    // 5. ACTION HANDLERS & NAVIGATION
     // =========================================================================
     private void handleLogin() {
         String name = loginNameField.getText().trim();
@@ -901,6 +1080,7 @@ public class SkillSwapClient extends JFrame {
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
                 autoPollInbox();
+                refreshUserGroupRooms();
                 inboxAutoTimer.start();
             } else {
                 loginStatusLabel.setText(response.replace("ERROR ", ""));
@@ -935,6 +1115,7 @@ public class SkillSwapClient extends JFrame {
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
                 autoPollInbox();
+                refreshUserGroupRooms();
                 inboxAutoTimer.start();
                 dashboardStatusLabel.setText("Account created successfully. Welcome to SkillSwap!");
             } else {
@@ -947,8 +1128,11 @@ public class SkillSwapClient extends JFrame {
         inboxAutoTimer.stop();
         currentUserName = "";
         currentUserPassword = "";
+        currentGroupCode = "";
         lastInboxContent = "";
+        lastGroupChatContent = "";
         inboxTextArea.setText("");
+        groupChatTextArea.setText("");
         rootCardLayout.show(rootPanel, "AUTH");
     }
 
@@ -1217,19 +1401,35 @@ public class SkillSwapClient extends JFrame {
             dashboardStatusLabel.setText(resp);
             msgTextField.setText("");
             autoPollInbox();
+            refreshUserGroupRooms();
         });
     }
 
-    // 1-second auto inbox poll without freezing GUI
+    // 1-second auto inbox poll for Direct Messaging & Group Chat without freezing GUI
     private void autoPollInbox() {
         if (currentUserName == null || currentUserName.trim().isEmpty()) return;
-        executeNetworkSilent("GET_MSGS " + currentUserName, resp -> {
+
+        // 1. Poll direct messages / active conversation
+        String toPartner = msgToField.getText().trim();
+        String req = toPartner.isEmpty() ? ("GET_MSGS " + currentUserName) : ("GET_MSGS " + currentUserName + "|" + toPartner);
+        executeNetworkSilent(req, resp -> {
             if (!resp.equals(lastInboxContent)) {
                 lastInboxContent = resp;
                 inboxTextArea.setText(resp);
                 inboxTextArea.setCaretPosition(inboxTextArea.getDocument().getLength());
             }
         });
+
+        // 2. Poll group chat messages if active room code selected
+        if (!currentGroupCode.isEmpty()) {
+            executeNetworkSilent("GET_GROUP_MSGS " + currentUserName + "|" + currentGroupCode, gResp -> {
+                if (!gResp.equals(lastGroupChatContent)) {
+                    lastGroupChatContent = gResp;
+                    groupChatTextArea.setText(gResp);
+                    groupChatTextArea.setCaretPosition(groupChatTextArea.getDocument().getLength());
+                }
+            });
+        }
     }
 
     // [CO4]: File Operations - Exporting chat history to a local text file
@@ -1255,7 +1455,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 5. NETWORKING UTILITIES
+    // 6. NETWORKING UTILITIES
     // =========================================================================
     private void executeNetwork(String request, java.util.function.Consumer<String> callback) {
         String host = hostField.getText().trim();
@@ -1313,7 +1513,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 6. CUSTOM MODERN SWING CONTROLS
+    // 7. CUSTOM MODERN SWING CONTROLS
     // =========================================================================
     private static JTextField createStyledTextField(String text, int cols) {
         JTextField tf = new JTextField(text, cols) {

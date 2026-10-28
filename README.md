@@ -58,6 +58,8 @@ This project incorporates all five Course Outcomes (CO1 to CO5) defined in the c
 - **Multi-Skill Affinity Scoring**: Calculates comprehensive compatibility percentages (0-100%) incorporating reciprocal trades, mentor matches, learner demand, and shared study interests.
 - **Auto-Checking Live Inbox**: Checks for new messages automatically every 1 second in the background without freezing the GUI.
 - **Direct Messaging Integration**: Clicking "Message User" on any peer card directly switches to the chat module and focuses the input field.
+- **Group Chat Module with 5-Letter Codes**: Dedicated "Group Chat" tab positioned between Direct Messaging and My Profile. Direct conversations automatically create a group room with a unique 5-letter code (e.g. `=== CHAT WITH ALICE [ABCDE] (3 message(s)) ===`). Any user can enter the 5-letter code to join the conversation.
+- **Multi-Recipient Messaging**: Supports sending messages to multiple users simultaneously using comma-separated usernames (e.g. `Cara, Nate`), logged as `[timestamp] To Cara, Nate: hi (Sent Message)` and `[timestamp] From Dave: hi (Received Message)` without quotation marks.
 - **Mirrored Profile Editor**: Allows users to update password, contact info, offered skills, and wanted interests with permanent greyed-out username.
 - **File Export**: One-click export of chat history to a local text file.
 - **Cross-Device Networking**: Socket-based client-server design allows execution across multiple laptops connected to the same Wi-Fi or mobile hotspot (Port 5050).
@@ -125,11 +127,12 @@ This micro-project leverages core Java OOP and design principles:
 | `AuthenticationException.java` | [CO3] User-defined exception for invalid login attempts. |
 | `InvalidProfileException.java` | [CO3] User-defined exception for validation errors in profiles. |
 | `ServiceResult.java` | [CO4] Generic response wrapper demonstrating type parameters and static generic methods. |
+| `GroupChat.java` | [CO2/CO4] Thread-safe multi-user chat room model managing unique 5-letter codes, member sets, and conversation history. |
 | `User.java` | [CO2] Domain model inheriting `AbstractAccount` and implementing `Matchable`. |
 | `MatchResult.java` | [CO1/CO4] Ranked match card with switch-based affinity categorization, implementing `Comparable`. |
-| `MatchEngine.java` | [CO3/CO4] Matching engine calculating affinity scores, managing thread-safe inboxes, and handling authentication. |
-| `SkillSwapServer.java` | [CO3/CO5] Multithreaded TCP socket server listening on port 5050; handles client requests and audit logging. |
-| `SkillSwapClient.java` | [CO4/CO5] Swing-based GUI with authentication, live tag previews, 1-sec auto inbox poller, and file export. |
+| `MatchEngine.java` | [CO3/CO4] Matching engine calculating affinity scores, managing thread-safe inboxes, group chat rooms, and authentication. |
+| `SkillSwapServer.java` | [CO3/CO5] Multithreaded TCP socket server listening on port 5050; handles client requests, group chats, and audit logging. |
+| `SkillSwapClient.java` | [CO4/CO5] Modern Swing GUI with authentication, live tag previews, 1-sec auto inbox poller, Group Chat tab with 5-letter codes, and file export. |
 | `Database.java` | [CO5] JDBC persistence layer connecting to MySQL with automatic fallback to in-memory mode. |
 
 ---
@@ -273,8 +276,11 @@ The server and clients communicate over plain-text line-based TCP socket command
 | `MATCH_DATA` | `MATCH_DATA <name>` | Returns structured match cards for GUI rendering with Affinity Scores. |
 | `MATCH` | `MATCH <name>` | Computes complete text report with affinity rankings. |
 | `USERS` | `USERS` | Returns a list of all users and their offered & wanted skills. |
-| `SEND_MSG` | `SEND_MSG <from>\|<to>\|<message>` | Routes a direct message to recipient's inbox. |
-| `GET_MSGS` | `GET_MSGS <name>` | Retrieves all pending/saved inbox messages for a user. |
+| `SEND_MSG` | `SEND_MSG <from>\|<to>\|<message>` | Routes message to single user, comma-separated users (`Cara, Nate`), or 5-letter group code. |
+| `GET_MSGS` | `GET_MSGS <name>[\|<partnerOrCode>]` | Retrieves inbox messages with header `=== CHAT WITH <TARGET> [CODE] (<count> message(s)) ===`. |
+| `JOIN_GROUP` | `JOIN_GROUP <name>\|<code5>` | Adds a user to an active conversation using its 5-letter code. |
+| `GET_GROUP_MSGS` | `GET_GROUP_MSGS <name>\|<code5>` | Retrieves complete multi-user chat room history. |
+| `GET_USER_GROUPS` | `GET_USER_GROUPS <name>` | Returns all active group rooms that the user belongs to. |
 
 ---
 
