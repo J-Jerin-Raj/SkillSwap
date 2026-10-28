@@ -13,11 +13,12 @@ import java.util.List;
  * [CO5]: Graphical User Interface Design using Swing API, Event Handling, and Socket Networking.
  * Features:
  * - Clean modern presentation tier without emojis.
- * - Credential authentication (Username + Password) on Sign In & Sign Up.
+ * - Perfectly aligned, balanced Sign In and Sign Up views with credential authentication.
  * - Dynamic 1-second background inbox polling using Swing Timer.
  * - Multi-skill & multi-interest management with live badge previews.
  * - Matchmaking feed with Affinity Scores and direct messaging integration.
  * - Mirrored Profile editor with locked username field.
+ * - Sent and Received message tracking ("Sent Message" / "Received Message").
  * - File I/O operations for exporting chat logs ([CO4]).
  */
 public class SkillSwapClient extends JFrame {
@@ -40,7 +41,7 @@ public class SkillSwapClient extends JFrame {
         public static final Color BORDER_SUBTLE = new Color(49, 54, 77);
 
         public static final Font TITLE_FONT   = new Font("SansSerif", Font.BOLD, 22);
-        public static final Font SUBTITLE_FONT= new Font("SansSerif", Font.BOLD, 15);
+        public static final Font SUBTITLE_FONT= new Font("SansSerif", Font.BOLD, 14);
         public static final Font BOLD_FONT    = new Font("SansSerif", Font.BOLD, 13);
         public static final Font REGULAR_FONT = new Font("SansSerif", Font.PLAIN, 13);
         public static final Font SMALL_FONT   = new Font("SansSerif", Font.PLAIN, 11);
@@ -48,7 +49,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // --- Network Settings ---
-    private final JTextField hostField = createStyledTextField("localhost", 10);
+    private final JTextField hostField = createStyledTextField("javamp", 10);
     private final JTextField portField = createStyledTextField("5050", 5);
 
     // --- Active Session ---
@@ -61,13 +62,16 @@ public class SkillSwapClient extends JFrame {
     // --- Navigation & Core Views ---
     private final CardLayout rootCardLayout = new CardLayout();
     private final JPanel rootPanel = new JPanel(rootCardLayout);
-    private JTabbedPane mainTabbedPane; // Direct reference to avoid brittle getParent() chains
+    private JTabbedPane mainTabbedPane;
 
     // --- Auth View Components ---
     private final CardLayout authCardLayout = new CardLayout();
     private final JPanel authCardContainer = new JPanel(authCardLayout);
+
+    // Sign In Fields
     private final JTextField loginNameField = createStyledTextField("", 16);
     private final JPasswordField loginPasswordField = createStyledPasswordField("", 16);
+    private final JLabel loginStatusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     // Sign Up Fields
     private final JTextField suNameField = createStyledTextField("", 16);
@@ -77,7 +81,7 @@ public class SkillSwapClient extends JFrame {
     private final JTextField suWantedField = createStyledTextField("", 20);
     private final JPanel suOfferedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
     private final JPanel suWantedPills = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 4));
-    private final JLabel authStatusLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JLabel suStatusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     // --- Dashboard Components ---
     private final JLabel userSessionLabel = new JLabel();
@@ -122,7 +126,7 @@ public class SkillSwapClient extends JFrame {
         rootCardLayout.show(rootPanel, "AUTH");
         add(rootPanel);
 
-        // Preload default demo user
+        // Preload default demo credentials
         loginNameField.setText("Alice");
         loginPasswordField.setText("alice123");
     }
@@ -136,13 +140,13 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 1. AUTHENTICATION VIEW (SIGN IN & SIGN UP)
+    // 1. AUTHENTICATION VIEW (PERFECTLY ALIGNED SIGN IN & SIGN UP CARDS)
     // =========================================================================
     private void initAuthScreen() {
         JPanel authView = new JPanel(new BorderLayout());
         authView.setBackground(Theme.BG_DARK);
 
-        // Top Network Settings Strip
+        // Top Network Settings Bar
         JPanel topNetworkBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
         topNetworkBar.setBackground(Theme.BG_DARK);
         topNetworkBar.setBorder(new EmptyBorder(4, 12, 4, 12));
@@ -160,77 +164,15 @@ public class SkillSwapClient extends JFrame {
         topNetworkBar.add(portLabel);
         topNetworkBar.add(portField);
 
-        // Center Box
+        // Center Wrapper
         JPanel centerWrap = new JPanel(new GridBagLayout());
         centerWrap.setBackground(Theme.BG_DARK);
 
-        RoundedPanel authBox = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
-        authBox.setPreferredSize(new Dimension(600, 630));
-        authBox.setLayout(new BorderLayout());
-        authBox.setBorder(new EmptyBorder(22, 26, 22, 26));
-
-        // Header Panel
-        JPanel headerPanel = new JPanel();
-        headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
-        headerPanel.setOpaque(false);
-
-        JLabel logoLabel = new JLabel("SkillSwap");
-        logoLabel.setFont(Theme.TITLE_FONT);
-        logoLabel.setForeground(Theme.TEXT_MAIN);
-        logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel subtitleLabel = new JLabel("Peer-to-Peer Collaborative Skill Exchange");
-        subtitleLabel.setFont(Theme.REGULAR_FONT);
-        subtitleLabel.setForeground(Theme.TEXT_MUTED);
-        subtitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        headerPanel.add(logoLabel);
-        headerPanel.add(Box.createVerticalStrut(4));
-        headerPanel.add(subtitleLabel);
-        headerPanel.add(Box.createVerticalStrut(14));
-
-        // Segmented Switcher Bar (Sign In / Sign Up)
-        JPanel switcherPanel = new JPanel(new GridLayout(1, 2, 8, 0));
-        switcherPanel.setOpaque(false);
-        switcherPanel.setPreferredSize(new Dimension(360, 38));
-        switcherPanel.setMaximumSize(new Dimension(360, 38));
-
-        ModernButton tabSignInBtn = new ModernButton("Sign In", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        ModernButton tabSignUpBtn = new ModernButton("Create Profile (Sign Up)", Theme.CARD_HOVER, Theme.PRIMARY);
-
-        tabSignInBtn.addActionListener(e -> {
-            tabSignInBtn.setBackgroundColor(Theme.PRIMARY);
-            tabSignUpBtn.setBackgroundColor(Theme.CARD_HOVER);
-            authCardLayout.show(authCardContainer, "LOGIN");
-            authStatusLabel.setText(" ");
-        });
-
-        tabSignUpBtn.addActionListener(e -> {
-            tabSignUpBtn.setBackgroundColor(Theme.PRIMARY);
-            tabSignInBtn.setBackgroundColor(Theme.CARD_HOVER);
-            authCardLayout.show(authCardContainer, "SIGNUP");
-            authStatusLabel.setText(" ");
-        });
-
-        switcherPanel.add(tabSignInBtn);
-        switcherPanel.add(tabSignUpBtn);
-
-        headerPanel.add(switcherPanel);
-        headerPanel.add(Box.createVerticalStrut(10));
-
-        // Form Cards Container
         authCardContainer.setOpaque(false);
-        authCardContainer.add(buildLoginForm(tabSignUpBtn), "LOGIN");
-        authCardContainer.add(buildSignUpForm(tabSignInBtn), "SIGNUP");
+        authCardContainer.add(buildLoginCard(), "LOGIN");
+        authCardContainer.add(buildSignUpCard(), "SIGNUP");
 
-        authStatusLabel.setFont(Theme.SMALL_FONT);
-        authStatusLabel.setForeground(Theme.CYAN);
-
-        authBox.add(headerPanel, BorderLayout.NORTH);
-        authBox.add(authCardContainer, BorderLayout.CENTER);
-        authBox.add(authStatusLabel, BorderLayout.SOUTH);
-
-        centerWrap.add(authBox);
+        centerWrap.add(authCardContainer);
 
         authView.add(topNetworkBar, BorderLayout.NORTH);
         authView.add(centerWrap, BorderLayout.CENTER);
@@ -238,59 +180,90 @@ public class SkillSwapClient extends JFrame {
         rootPanel.add(authView, "AUTH");
     }
 
-    private JPanel buildLoginForm(ModernButton switchToSignUpBtn) {
-        JPanel formWrap = new JPanel();
-        formWrap.setLayout(new BoxLayout(formWrap, BoxLayout.Y_AXIS));
-        formWrap.setOpaque(false);
-        formWrap.setBorder(new EmptyBorder(16, 20, 10, 20));
+    private JPanel buildLoginCard() {
+        RoundedPanel card = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
+        card.setPreferredSize(new Dimension(480, 500));
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(22, 28, 22, 28));
+
+        // Header
+        JLabel logo = new JLabel("SkillSwap");
+        logo.setFont(Theme.TITLE_FONT);
+        logo.setForeground(Theme.TEXT_MAIN);
+        logo.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel sub = new JLabel("Peer-to-Peer Collaborative Skill Exchange");
+        sub.setFont(Theme.REGULAR_FONT);
+        sub.setForeground(Theme.TEXT_MUTED);
+        sub.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Switcher Bar (320px)
+        JPanel switcher = new JPanel(new GridLayout(1, 2, 8, 0));
+        switcher.setOpaque(false);
+        switcher.setPreferredSize(new Dimension(320, 36));
+        switcher.setMaximumSize(new Dimension(320, 36));
+        switcher.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        ModernButton tabSignIn = new ModernButton("Sign In", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+        ModernButton tabSignUp = new ModernButton("Sign Up", Theme.CARD_HOVER, Theme.PRIMARY);
+
+        tabSignUp.addActionListener(e -> {
+            authCardLayout.show(authCardContainer, "SIGNUP");
+            suStatusLabel.setText(" ");
+        });
+
+        switcher.add(tabSignIn);
+        switcher.add(tabSignUp);
+
+        // Centered Form Column (360px wide)
+        JPanel formCol = new JPanel();
+        formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
+        formCol.setOpaque(false);
+        formCol.setMaximumSize(new Dimension(360, 300));
+        formCol.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JLabel info = new JLabel("Enter your registered credentials to sign in:");
         info.setFont(Theme.REGULAR_FONT);
         info.setForeground(Theme.TEXT_MUTED);
-        info.setAlignmentX(Component.LEFT_ALIGNMENT);
+        info.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel userLbl = new JLabel("Username / Name:");
-        userLbl.setFont(Theme.BOLD_FONT);
-        userLbl.setForeground(Theme.TEXT_MAIN);
-        userLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        loginNameField.setMaximumSize(new Dimension(360, 36));
+        loginPasswordField.setMaximumSize(new Dimension(360, 36));
 
-        JLabel passLbl = new JLabel("Password:");
-        passLbl.setFont(Theme.BOLD_FONT);
-        passLbl.setForeground(Theme.TEXT_MAIN);
-        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel userRow = createFieldBlock("Username / Name:", loginNameField, Theme.TEXT_MAIN);
+        JPanel passRow = createFieldBlock("Password:", loginPasswordField, Theme.TEXT_MAIN);
 
         ModernButton loginBtn = new ModernButton("Sign In to SkillSwap", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        loginBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
-        loginBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        loginBtn.setMaximumSize(new Dimension(360, 38));
+        loginBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         loginBtn.addActionListener(e -> handleLogin());
         loginNameField.addActionListener(e -> loginPasswordField.requestFocusInWindow());
         loginPasswordField.addActionListener(e -> handleLogin());
 
-        formWrap.add(info);
-        formWrap.add(Box.createVerticalStrut(14));
-        formWrap.add(userLbl);
-        formWrap.add(Box.createVerticalStrut(4));
-        formWrap.add(loginNameField);
-        formWrap.add(Box.createVerticalStrut(10));
-        formWrap.add(passLbl);
-        formWrap.add(Box.createVerticalStrut(4));
-        formWrap.add(loginPasswordField);
-        formWrap.add(Box.createVerticalStrut(16));
-        formWrap.add(loginBtn);
-        formWrap.add(Box.createVerticalStrut(14));
+        loginStatusLabel.setFont(Theme.SMALL_FONT);
+        loginStatusLabel.setForeground(Theme.CYAN);
+        loginStatusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Quick demo user buttons
-        JLabel quickLbl = new JLabel("Quick Demo Profiles:");
-        quickLbl.setFont(Theme.SMALL_FONT);
-        quickLbl.setForeground(Theme.TEXT_MUTED);
-        quickLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-        formWrap.add(quickLbl);
-        formWrap.add(Box.createVerticalStrut(6));
+        formCol.add(info);
+        formCol.add(Box.createVerticalStrut(14));
+        formCol.add(userRow);
+        formCol.add(Box.createVerticalStrut(8));
+        formCol.add(passRow);
+        formCol.add(Box.createVerticalStrut(16));
+        formCol.add(loginBtn);
+        formCol.add(Box.createVerticalStrut(6));
+        formCol.add(loginStatusLabel);
 
-        JPanel demoBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // Demo Accounts Row
+        JLabel demoLbl = new JLabel("Quick Demo Profiles:");
+        demoLbl.setFont(Theme.SMALL_FONT);
+        demoLbl.setForeground(Theme.TEXT_MUTED);
+        demoLbl.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JPanel demoBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
         demoBar.setOpaque(false);
-        demoBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        demoBar.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         String[][] demoUsers = {
             {"Alice", "alice123"},
@@ -298,54 +271,96 @@ public class SkillSwapClient extends JFrame {
             {"Cara", "cara123"},
             {"David", "david123"}
         };
-
-        for (String[] demo : demoUsers) {
-            JButton b = createChipButton(demo[0], Theme.CARD_HOVER, Theme.TEXT_MAIN);
+        for (String[] d : demoUsers) {
+            JButton b = createChipButton(d[0], Theme.INPUT_BG, Theme.TEXT_MAIN);
             b.addActionListener(ev -> {
-                loginNameField.setText(demo[0]);
-                loginPasswordField.setText(demo[1]);
+                loginNameField.setText(d[0]);
+                loginPasswordField.setText(d[1]);
                 handleLogin();
             });
             demoBar.add(b);
         }
-        formWrap.add(demoBar);
-
-        formWrap.add(Box.createVerticalGlue());
 
         JButton linkBtn = createTextLinkButton("Don't have a profile yet? Click here to Sign Up ->");
-        linkBtn.addActionListener(e -> switchToSignUpBtn.doClick());
+        linkBtn.addActionListener(e -> tabSignUp.doClick());
         linkBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        formWrap.add(linkBtn);
 
-        return formWrap;
+        card.add(logo);
+        card.add(Box.createVerticalStrut(4));
+        card.add(sub);
+        card.add(Box.createVerticalStrut(14));
+        card.add(switcher);
+        card.add(Box.createVerticalStrut(16));
+        card.add(formCol);
+        card.add(Box.createVerticalStrut(8));
+        card.add(demoLbl);
+        card.add(Box.createVerticalStrut(4));
+        card.add(demoBar);
+        card.add(Box.createVerticalGlue());
+        card.add(linkBtn);
+
+        return card;
     }
 
-    private JPanel buildSignUpForm(ModernButton switchToSignInBtn) {
-        JPanel formWrap = new JPanel();
-        formWrap.setLayout(new BoxLayout(formWrap, BoxLayout.Y_AXIS));
-        formWrap.setOpaque(false);
-        formWrap.setBorder(new EmptyBorder(8, 10, 4, 10));
+    private JPanel buildSignUpCard() {
+        RoundedPanel card = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
+        card.setPreferredSize(new Dimension(560, 650));
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(new EmptyBorder(18, 26, 16, 26));
 
-        // Username
-        JLabel nameLbl = new JLabel("Username / Name *:");
-        nameLbl.setFont(Theme.BOLD_FONT);
-        nameLbl.setForeground(Theme.TEXT_MAIN);
-        nameLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Header
+        JLabel logo = new JLabel("SkillSwap");
+        logo.setFont(Theme.TITLE_FONT);
+        logo.setForeground(Theme.TEXT_MAIN);
+        logo.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Password
-        JLabel passLbl = new JLabel("Password *:");
-        passLbl.setFont(Theme.BOLD_FONT);
-        passLbl.setForeground(Theme.TEXT_MAIN);
-        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel sub = new JLabel("Peer-to-Peer Collaborative Skill Exchange");
+        sub.setFont(Theme.REGULAR_FONT);
+        sub.setForeground(Theme.TEXT_MUTED);
+        sub.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Contact
-        JLabel contactLbl = new JLabel("Contact (Email / Discord / Phone) *:");
-        contactLbl.setFont(Theme.BOLD_FONT);
-        contactLbl.setForeground(Theme.TEXT_MAIN);
-        contactLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Switcher Bar (320px)
+        JPanel switcher = new JPanel(new GridLayout(1, 2, 8, 0));
+        switcher.setOpaque(false);
+        switcher.setPreferredSize(new Dimension(320, 36));
+        switcher.setMaximumSize(new Dimension(320, 36));
+        switcher.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Skills Offered
-        JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (Multiple, comma-separated) *:");
+        ModernButton tabSignIn = new ModernButton("Sign In", Theme.CARD_HOVER, Theme.PRIMARY);
+        ModernButton tabSignUp = new ModernButton("Sign Up", Theme.PRIMARY, Theme.PRIMARY_HOVER);
+
+        tabSignIn.addActionListener(e -> {
+            authCardLayout.show(authCardContainer, "LOGIN");
+            loginStatusLabel.setText(" ");
+        });
+
+        switcher.add(tabSignIn);
+        switcher.add(tabSignUp);
+
+        // Centered Form Column (480px wide)
+        JPanel formCol = new JPanel();
+        formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
+        formCol.setOpaque(false);
+        formCol.setMaximumSize(new Dimension(480, 520));
+        formCol.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        suNameField.setMaximumSize(new Dimension(480, 34));
+        suPasswordField.setMaximumSize(new Dimension(480, 34));
+        suContactField.setMaximumSize(new Dimension(480, 34));
+        suOfferedField.setMaximumSize(new Dimension(480, 34));
+        suWantedField.setMaximumSize(new Dimension(480, 34));
+
+        JPanel nameRow = createFieldBlock("Username / Name *:", suNameField, Theme.TEXT_MAIN);
+        JPanel passRow = createFieldBlock("Password *:", suPasswordField, Theme.TEXT_MAIN);
+        JPanel contactRow = createFieldBlock("Contact (Email / Discord / Phone) *:", suContactField, Theme.TEXT_MAIN);
+
+        // Offered skills block
+        JPanel offeredBlock = new JPanel();
+        offeredBlock.setLayout(new BoxLayout(offeredBlock, BoxLayout.Y_AXIS));
+        offeredBlock.setOpaque(false);
+        offeredBlock.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (comma-separated) *:");
         offeredLbl.setFont(Theme.BOLD_FONT);
         offeredLbl.setForeground(Theme.SUCCESS);
         offeredLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -363,8 +378,19 @@ public class SkillSwapClient extends JFrame {
         suOfferedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
         attachPillUpdater(suOfferedField, suOfferedPills, Theme.SUCCESS);
 
-        // Skills Wanted
-        JLabel wantedLbl = new JLabel("Interests / Skills I Want To Learn (Multiple, comma-separated) *:");
+        offeredBlock.add(offeredLbl);
+        offeredBlock.add(Box.createVerticalStrut(2));
+        offeredBlock.add(suOfferedField);
+        offeredBlock.add(quickOffered);
+        offeredBlock.add(suOfferedPills);
+
+        // Wanted skills block
+        JPanel wantedBlock = new JPanel();
+        wantedBlock.setLayout(new BoxLayout(wantedBlock, BoxLayout.Y_AXIS));
+        wantedBlock.setOpaque(false);
+        wantedBlock.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel wantedLbl = new JLabel("Interests & Skills to Learn (comma-separated) *:");
         wantedLbl.setFont(Theme.BOLD_FONT);
         wantedLbl.setForeground(Theme.CYAN);
         wantedLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -382,49 +408,69 @@ public class SkillSwapClient extends JFrame {
         suWantedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
         attachPillUpdater(suWantedField, suWantedPills, Theme.CYAN);
 
+        wantedBlock.add(wantedLbl);
+        wantedBlock.add(Box.createVerticalStrut(2));
+        wantedBlock.add(suWantedField);
+        wantedBlock.add(quickWanted);
+        wantedBlock.add(suWantedPills);
+
         ModernButton signUpBtn = new ModernButton("Complete Sign Up & Enter Dashboard", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        signUpBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 38));
-        signUpBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        signUpBtn.setMaximumSize(new Dimension(480, 38));
+        signUpBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
         signUpBtn.addActionListener(e -> handleSignUp());
 
-        formWrap.add(nameLbl);
-        formWrap.add(Box.createVerticalStrut(2));
-        formWrap.add(suNameField);
-        formWrap.add(Box.createVerticalStrut(4));
+        suStatusLabel.setFont(Theme.SMALL_FONT);
+        suStatusLabel.setForeground(Theme.CYAN);
+        suStatusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        formWrap.add(passLbl);
-        formWrap.add(Box.createVerticalStrut(2));
-        formWrap.add(suPasswordField);
-        formWrap.add(Box.createVerticalStrut(4));
-
-        formWrap.add(contactLbl);
-        formWrap.add(Box.createVerticalStrut(2));
-        formWrap.add(suContactField);
-        formWrap.add(Box.createVerticalStrut(6));
-
-        formWrap.add(offeredLbl);
-        formWrap.add(Box.createVerticalStrut(2));
-        formWrap.add(suOfferedField);
-        formWrap.add(quickOffered);
-        formWrap.add(suOfferedPills);
-        formWrap.add(Box.createVerticalStrut(4));
-
-        formWrap.add(wantedLbl);
-        formWrap.add(Box.createVerticalStrut(2));
-        formWrap.add(suWantedField);
-        formWrap.add(quickWanted);
-        formWrap.add(suWantedPills);
-        formWrap.add(Box.createVerticalStrut(8));
-
-        formWrap.add(signUpBtn);
+        formCol.add(nameRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(passRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(contactRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(offeredBlock);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(wantedBlock);
+        formCol.add(Box.createVerticalStrut(8));
+        formCol.add(signUpBtn);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(suStatusLabel);
 
         JButton link = createTextLinkButton("Already registered? Sign In instead ->");
-        link.addActionListener(e -> switchToSignInBtn.doClick());
+        link.addActionListener(e -> tabSignIn.doClick());
         link.setAlignmentX(Component.CENTER_ALIGNMENT);
-        formWrap.add(Box.createVerticalStrut(4));
-        formWrap.add(link);
 
-        return formWrap;
+        card.add(logo);
+        card.add(Box.createVerticalStrut(3));
+        card.add(sub);
+        card.add(Box.createVerticalStrut(10));
+        card.add(switcher);
+        card.add(Box.createVerticalStrut(12));
+        card.add(formCol);
+        card.add(Box.createVerticalGlue());
+        card.add(link);
+
+        return card;
+    }
+
+    private static JPanel createFieldBlock(String labelText, JComponent field, Color labelColor) {
+        JPanel block = new JPanel();
+        block.setLayout(new BoxLayout(block, BoxLayout.Y_AXIS));
+        block.setOpaque(false);
+        block.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel label = new JLabel(labelText);
+        label.setFont(Theme.BOLD_FONT);
+        label.setForeground(labelColor != null ? labelColor : Theme.TEXT_MAIN);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        block.add(label);
+        block.add(Box.createVerticalStrut(2));
+        block.add(field);
+        return block;
     }
 
     private void appendSkill(JTextField field, String skill) {
@@ -624,7 +670,7 @@ public class SkillSwapClient extends JFrame {
         RoundedPanel sendCard = new RoundedPanel(12, Theme.CARD_BG, Theme.BORDER_SUBTLE);
         sendCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
 
-        JLabel toLbl = new JLabel("To User:");
+        JLabel toLbl = new JLabel("Send message to:");
         toLbl.setFont(Theme.BOLD_FONT);
         toLbl.setForeground(Theme.TEXT_MAIN);
 
@@ -668,40 +714,49 @@ public class SkillSwapClient extends JFrame {
         wrap.setBackground(Theme.BG_DARK);
 
         RoundedPanel card = new RoundedPanel(18, Theme.CARD_BG, Theme.BORDER_SUBTLE);
-        card.setPreferredSize(new Dimension(620, 600));
+        card.setPreferredSize(new Dimension(560, 650));
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
-        card.setBorder(new EmptyBorder(20, 26, 20, 26));
+        card.setBorder(new EmptyBorder(18, 26, 16, 26));
 
         JLabel title = new JLabel("My Profile Settings");
         title.setFont(Theme.TITLE_FONT);
         title.setForeground(Theme.TEXT_MAIN);
-        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Greyed out Username
-        JLabel nameLbl = new JLabel("Username (Locked / Permanent):");
-        nameLbl.setFont(Theme.BOLD_FONT);
-        nameLbl.setForeground(Theme.TEXT_MUTED);
-        nameLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel sub = new JLabel("Update your skills, interests, and password");
+        sub.setFont(Theme.REGULAR_FONT);
+        sub.setForeground(Theme.TEXT_MUTED);
+        sub.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Centered Form Column (480px)
+        JPanel formCol = new JPanel();
+        formCol.setLayout(new BoxLayout(formCol, BoxLayout.Y_AXIS));
+        formCol.setOpaque(false);
+        formCol.setMaximumSize(new Dimension(480, 520));
+        formCol.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         profNameField.setEnabled(false);
         profNameField.setEditable(false);
         profNameField.setBackground(Theme.CARD_HOVER);
         profNameField.setForeground(Theme.TEXT_MUTED);
+        profNameField.setMaximumSize(new Dimension(480, 34));
 
-        // Password
-        JLabel passLbl = new JLabel("Account Password:");
-        passLbl.setFont(Theme.BOLD_FONT);
-        passLbl.setForeground(Theme.TEXT_MAIN);
-        passLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        profPasswordField.setMaximumSize(new Dimension(480, 34));
+        profContactField.setMaximumSize(new Dimension(480, 34));
+        profOfferedField.setMaximumSize(new Dimension(480, 34));
+        profWantedField.setMaximumSize(new Dimension(480, 34));
 
-        // Contact
-        JLabel contactLbl = new JLabel("Contact (Email / Discord / Phone):");
-        contactLbl.setFont(Theme.BOLD_FONT);
-        contactLbl.setForeground(Theme.TEXT_MAIN);
-        contactLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel nameRow = createFieldBlock("Username (Locked / Permanent):", profNameField, Theme.TEXT_MUTED);
+        JPanel passRow = createFieldBlock("Account Password:", profPasswordField, Theme.TEXT_MAIN);
+        JPanel contactRow = createFieldBlock("Contact (Email / Discord / Phone):", profContactField, Theme.TEXT_MAIN);
 
-        // Skills Offered
-        JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (Multiple, comma-separated):");
+        // Offered skills block
+        JPanel offeredBlock = new JPanel();
+        offeredBlock.setLayout(new BoxLayout(offeredBlock, BoxLayout.Y_AXIS));
+        offeredBlock.setOpaque(false);
+        offeredBlock.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel offeredLbl = new JLabel("Skills I Can Teach / Offer (comma-separated):");
         offeredLbl.setFont(Theme.BOLD_FONT);
         offeredLbl.setForeground(Theme.SUCCESS);
         offeredLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -719,8 +774,19 @@ public class SkillSwapClient extends JFrame {
         profOfferedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
         attachPillUpdater(profOfferedField, profOfferedPills, Theme.SUCCESS);
 
-        // Skills Wanted
-        JLabel wantedLbl = new JLabel("Interests / Skills I Want To Learn (Multiple, comma-separated):");
+        offeredBlock.add(offeredLbl);
+        offeredBlock.add(Box.createVerticalStrut(2));
+        offeredBlock.add(profOfferedField);
+        offeredBlock.add(quickOffered);
+        offeredBlock.add(profOfferedPills);
+
+        // Wanted skills block
+        JPanel wantedBlock = new JPanel();
+        wantedBlock.setLayout(new BoxLayout(wantedBlock, BoxLayout.Y_AXIS));
+        wantedBlock.setOpaque(false);
+        wantedBlock.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel wantedLbl = new JLabel("Interests & Skills to Learn (comma-separated):");
         wantedLbl.setFont(Theme.BOLD_FONT);
         wantedLbl.setForeground(Theme.CYAN);
         wantedLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -738,9 +804,15 @@ public class SkillSwapClient extends JFrame {
         profWantedPills.setAlignmentX(Component.LEFT_ALIGNMENT);
         attachPillUpdater(profWantedField, profWantedPills, Theme.CYAN);
 
+        wantedBlock.add(wantedLbl);
+        wantedBlock.add(Box.createVerticalStrut(2));
+        wantedBlock.add(profWantedField);
+        wantedBlock.add(quickWanted);
+        wantedBlock.add(profWantedPills);
+
         ModernButton saveProfileBtn = new ModernButton("Save Profile Changes", Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        saveProfileBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
-        saveProfileBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        saveProfileBtn.setMaximumSize(new Dimension(480, 38));
+        saveProfileBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         saveProfileBtn.addActionListener(e -> {
             String name = profNameField.getText().trim();
@@ -771,38 +843,23 @@ public class SkillSwapClient extends JFrame {
             });
         });
 
+        formCol.add(nameRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(passRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(contactRow);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(offeredBlock);
+        formCol.add(Box.createVerticalStrut(4));
+        formCol.add(wantedBlock);
+        formCol.add(Box.createVerticalStrut(8));
+        formCol.add(saveProfileBtn);
+
         card.add(title);
-        card.add(Box.createVerticalStrut(10));
-        card.add(nameLbl);
-        card.add(Box.createVerticalStrut(2));
-        card.add(profNameField);
-        card.add(Box.createVerticalStrut(6));
-
-        card.add(passLbl);
-        card.add(Box.createVerticalStrut(2));
-        card.add(profPasswordField);
-        card.add(Box.createVerticalStrut(6));
-
-        card.add(contactLbl);
-        card.add(Box.createVerticalStrut(2));
-        card.add(profContactField);
-        card.add(Box.createVerticalStrut(6));
-
-        card.add(offeredLbl);
-        card.add(Box.createVerticalStrut(2));
-        card.add(profOfferedField);
-        card.add(quickOffered);
-        card.add(profOfferedPills);
-        card.add(Box.createVerticalStrut(4));
-
-        card.add(wantedLbl);
-        card.add(Box.createVerticalStrut(2));
-        card.add(profWantedField);
-        card.add(quickWanted);
-        card.add(profWantedPills);
-        card.add(Box.createVerticalStrut(10));
-
-        card.add(saveProfileBtn);
+        card.add(Box.createVerticalStrut(3));
+        card.add(sub);
+        card.add(Box.createVerticalStrut(14));
+        card.add(formCol);
 
         wrap.add(card);
         return wrap;
@@ -817,18 +874,18 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 4. HANDLERS, MATCHMAKING & RELIABLE TAB SWITCHING
+    // 4. ACTION HANDLERS & NAVIGATION
     // =========================================================================
     private void handleLogin() {
         String name = loginNameField.getText().trim();
         String password = new String(loginPasswordField.getPassword()).trim();
 
         if (name.isEmpty() || password.isEmpty()) {
-            authStatusLabel.setText("Please enter both username and password.");
+            loginStatusLabel.setText("Please enter both username and password.");
             return;
         }
 
-        authStatusLabel.setText("Authenticating credentials for '" + name + "'...");
+        loginStatusLabel.setText("Authenticating credentials for '" + name + "'...");
         executeNetwork("LOGIN " + name + "|" + password, response -> {
             if (response.startsWith("OK|")) {
                 String[] parts = response.split("\\|", -1);
@@ -844,9 +901,9 @@ public class SkillSwapClient extends JFrame {
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
                 autoPollInbox();
-                inboxAutoTimer.start(); // Start 1-sec auto polling
+                inboxAutoTimer.start();
             } else {
-                authStatusLabel.setText(response.replace("ERROR ", ""));
+                loginStatusLabel.setText(response.replace("ERROR ", ""));
             }
         });
     }
@@ -859,11 +916,11 @@ public class SkillSwapClient extends JFrame {
         String wanted = suWantedField.getText().trim();
 
         if (name.isEmpty() || password.isEmpty()) {
-            authStatusLabel.setText("Username and password are required.");
+            suStatusLabel.setText("Username and password are required.");
             return;
         }
 
-        authStatusLabel.setText("Registering profile for '" + name + "'...");
+        suStatusLabel.setText("Registering profile for '" + name + "'...");
         executeNetwork("REGISTER " + name + "|" + password + "|" + contact + "|" + offered + "|" + wanted, response -> {
             if (response.startsWith("OK")) {
                 currentUserName = name;
@@ -878,16 +935,16 @@ public class SkillSwapClient extends JFrame {
                 rootCardLayout.show(rootPanel, "DASHBOARD");
                 loadMatches();
                 autoPollInbox();
-                inboxAutoTimer.start(); // Start 1-sec auto polling
+                inboxAutoTimer.start();
                 dashboardStatusLabel.setText("Account created successfully. Welcome to SkillSwap!");
             } else {
-                authStatusLabel.setText(response.replace("ERROR ", ""));
+                suStatusLabel.setText(response.replace("ERROR ", ""));
             }
         });
     }
 
     private void handleSignOut() {
-        inboxAutoTimer.stop(); // Stop background polling
+        inboxAutoTimer.stop();
         currentUserName = "";
         currentUserPassword = "";
         lastInboxContent = "";
@@ -895,11 +952,10 @@ public class SkillSwapClient extends JFrame {
         rootCardLayout.show(rootPanel, "AUTH");
     }
 
-    /** Direct method taking user to Chat tab and populating recipient */
     private void openDirectMessageWith(String recipientName) {
         msgToField.setText(recipientName);
         if (mainTabbedPane != null) {
-            mainTabbedPane.setSelectedIndex(2); // Direct Messaging tab
+            mainTabbedPane.setSelectedIndex(2);
         }
         SwingUtilities.invokeLater(() -> msgTextField.requestFocusInWindow());
     }
@@ -951,7 +1007,6 @@ public class SkillSwapClient extends JFrame {
             dashboardStatusLabel.setText("Found " + cardCount + " compatible match(es) for " + currentUserName);
         });
 
-        // Also update text view
         executeNetwork("MATCH " + currentUserName, reportResponse -> {
             matchesRawTextArea.setText(reportResponse);
             matchesRawTextArea.setCaretPosition(0);
@@ -1059,7 +1114,6 @@ public class SkillSwapClient extends JFrame {
         allSkillsLbl.setForeground(Theme.TEXT_MUTED);
 
         ModernButton chatBtn = new ModernButton("Message " + name, Theme.PRIMARY, Theme.PRIMARY_HOVER);
-        // Direct reliable call to open chat
         chatBtn.addActionListener(e -> openDirectMessageWith(name));
 
         bottomRow.add(allSkillsLbl, BorderLayout.WEST);
@@ -1162,7 +1216,7 @@ public class SkillSwapClient extends JFrame {
         executeNetwork("SEND_MSG " + from + "|" + to + "|" + msg, resp -> {
             dashboardStatusLabel.setText(resp);
             msgTextField.setText("");
-            autoPollInbox(); // Immediately refresh inbox
+            autoPollInbox();
         });
     }
 
@@ -1250,7 +1304,6 @@ public class SkillSwapClient extends JFrame {
                 String result = sb.toString().trim();
                 SwingUtilities.invokeLater(() -> callback.accept(result));
             } catch (Exception ignored) {
-                // Silent fail for polling background thread
             }
         }).start();
     }
@@ -1260,7 +1313,7 @@ public class SkillSwapClient extends JFrame {
     }
 
     // =========================================================================
-    // 6. CUSTOM MODERN SWING CONTROLS (BOUNDED DIMENSIONS)
+    // 6. CUSTOM MODERN SWING CONTROLS
     // =========================================================================
     private static JTextField createStyledTextField(String text, int cols) {
         JTextField tf = new JTextField(text, cols) {
@@ -1283,10 +1336,8 @@ public class SkillSwapClient extends JFrame {
                 BorderFactory.createLineBorder(Theme.INPUT_BORDER, 1, true),
                 new EmptyBorder(6, 10, 6, 10)
         ));
-        // Crucial fix: bounds maximumSize so BoxLayout never stretches vertically
         tf.setMaximumSize(new Dimension(Short.MAX_VALUE, 36));
         tf.setPreferredSize(new Dimension(280, 36));
-        tf.setAlignmentX(Component.LEFT_ALIGNMENT);
         return tf;
     }
 
@@ -1311,10 +1362,8 @@ public class SkillSwapClient extends JFrame {
                 BorderFactory.createLineBorder(Theme.INPUT_BORDER, 1, true),
                 new EmptyBorder(6, 10, 6, 10)
         ));
-        // Crucial fix: bounds maximumSize so BoxLayout never stretches vertically
         pf.setMaximumSize(new Dimension(Short.MAX_VALUE, 36));
         pf.setPreferredSize(new Dimension(280, 36));
-        pf.setAlignmentX(Component.LEFT_ALIGNMENT);
         return pf;
     }
 
